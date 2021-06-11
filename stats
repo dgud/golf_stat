@@ -1,0 +1,19 @@
+#!/usr/bin/env escript
+%% -*- erlang -*-
+
+-module(stats).
+
+-mode(compile).
+
+usage() ->
+    io:format("./stats <file>~n",[]),
+    halt(1).
+
+main(Args) ->
+    io:setopts(standard_io, [{encoding, utf8}]),
+    Script = filename:absname(escript:script_name()),
+    true = code:add_patha(filename:join(filename:dirname(Script), "_build/default/lib/golf_stat/ebin")),
+    case Args of
+        [File] -> gs_gui:start(File);
+        _ -> usage()
+    end.
