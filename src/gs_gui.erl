@@ -50,8 +50,8 @@ loop(#{frame := Frame, rounds:=Rounds, stat:=Stat} = State0) ->
             wxTextCtrl:setValue(Stat, gs_stats:print_stats([Round])),
             Name = round_id(Round),
             Choice = maps:get(stat_sel, State0),
-            wxChoice:insert(Choice, Name, 0),
-            wxChoice:setSelection(Choice, 0),
+            wxChoice:insert(Choice, Name, 1), %% Total is always 0
+            wxChoice:setSelection(Choice, 1),
             loop(State0#{rounds:=NewRounds});
         {new_course, Course} ->
             NewCourses = [Course|maps:get(courses, State0)],
@@ -84,6 +84,7 @@ stats_page(NB, Rounds) ->
     RoundNames = ["Total"| [ round_id(Course) || Course <- Rounds]],
     Choice = wxChoice:new(Win, ?COURSE, [{size, {400,-1}}, {choices, RoundNames}]),
     wxChoice:connect(Choice,command_choice_selected),
+    wxChoice:setSelection(Choice, 0),
     wxSizer:add(Sz, Choice, [{border, 10}, {flag, ?wxALL}]),
     Font = wxFont:new(12, ?wxMODERN, ?wxNORMAL, ?wxNORMAL),
     Text = wxTextCtrl:new(Win, ?wxID_ANY, [{style, ?wxTE_MULTILINE bor ?wxTE_RICH2 bor ?wxTE_READONLY}]),

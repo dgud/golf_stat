@@ -123,8 +123,10 @@ analyze_hole(Hole) ->
             #{chip := Chip, bunker := Bunker, pitch := Pitch} = Hole,
             Short = sum(Chip)+sum(Bunker)+sum(Pitch),
             UpAndDown = bool_to_int(Total =< Par andalso Short > 0 andalso Putts =< 1),
+            {P1,P2} = other_par(Par),
 
             Stat = #{count => 1, {par,Par} => Total, {par_n,Par} => 1,
+                     {par, P1} => 0, {par, P2} => 0,  %% Default values prohibit crash later
                      gir=> Gir, 'par save' => ParSave, 'up and down' => UpAndDown,
                      putts => Putts, {putt,PuttsN} => 1,
                      hio => Hio, albatross => Albatross, eagle => Eagle, birdie => Birde, par => MadePar,
@@ -132,6 +134,11 @@ analyze_hole(Hole) ->
                     },
             Hole#{stat => Stat}
     end.
+
+other_par(3) -> {4,5};
+other_par(4) -> {3,5};
+other_par(5) -> {3,4}.
+
 
 bool_to_int(false) -> 0;
 bool_to_int(true) -> 1.
@@ -170,9 +177,10 @@ print_stats(What, Rounds0) ->
     NoRounds = length(Rounds0),
     #{count := NoHoles, {par,3} := P3, {par,4} := P4, {par,5} := P5} = Stat,
     NoShots = P3+P4+P5,
-
+    AveragePerRound = (NoShots - Par) / NoHoles * 18.0,
     [What,
-     io_lib:format(" Par: ~w Shots: ~w  over (~w)~n", [Par, NoShots, NoShots - Par]),
+     io_lib:format(" Par: ~w Shots: ~w +/- ~w shots ~4.1f per 18 holes~n",
+                   [Par, NoShots, NoShots - Par, AveragePerRound]),
      shot_stats(ShotStats, NoHoles, NoRounds),
      putt_stats(Stat, NoHoles, NoRounds),
      io_lib:nl(),
@@ -219,7 +227,7 @@ play_stats(Stat, NoHoles, NoRounds) ->
 
 score_stats(Stat, _NoHoles, _NoRounds) ->
     [io_lib:format("Average scores:~n",[])|
-     [io_lib:format(" Par ~w: ~5.2f~n", [N, maps:get({par,N}, Stat)/maps:get({par_n,N},Stat)]) || N <- [3,4,5]]].
+     [io_lib:format(" Par ~w: ~5.2f~n", [N, maps:get({par,N}, Stat)/maps:get({par_n,N},Stat,1)]) || N <- [3,4,5]]].
 
 training(Shots, _NoHoles, _NoRounds) ->
     Rate = fun(Bad, _Good, _Perfect) ->
