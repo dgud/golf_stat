@@ -5,7 +5,7 @@
          keys/0, key/1, shots/0,
          read/1, save/2,
          read_courses/1, save_courses/2,
-         print_stats/1
+         print_stats/1, print_holes/1
         ]).
 
 read(File) ->
@@ -169,31 +169,36 @@ print_stats(Stats) ->
     print_stats("Summary of all rounds", Stats).
 
 print_stats(What, Rounds0) ->
-    Merged = lists:foldl(fun(R, Acc) ->
-                                merge(merge_round(R), Acc)
-                        end, empty(), Rounds0),
     %% io:format("~p: ~p~n~n",[?LINE,Merged]),
-    [{par, Par},{stat, Stat}|ShotStats] = sort(maps:to_list(Merged)),
+    [{par, Par},{stat, Stat0}|ShotStats] = collect(Rounds0),
     NoRounds = length(Rounds0),
+    Stat = Stat0#{no_rounds => NoRounds},
     #{count := NoHoles, {par,3} := P3, {par,4} := P4, {par,5} := P5} = Stat,
     NoShots = P3+P4+P5,
     AveragePerRound = (NoShots - Par) / NoHoles * 18.0,
     [What,
      io_lib:format(" Par: ~w Shots: ~w +/- ~w shots ~4.1f per 18 holes~n",
                    [Par, NoShots, NoShots - Par, AveragePerRound]),
-     shot_stats(ShotStats, NoHoles, NoRounds),
-     putt_stats(Stat, NoHoles, NoRounds),
+     shot_stats(ShotStats, Stat),
+     putt_stats(Stat),
      io_lib:nl(),
-     hole_stats(Stat, NoHoles, NoRounds),
+     hole_stats(Stat),
      io_lib:nl(),
-     play_stats(Stat, NoHoles, NoRounds),
+     play_stats(Stat),
      io_lib:nl(),
-     score_stats(Stat, NoHoles, NoRounds),
+     score_stats(Stat),
      io_lib:nl(),
-     training(ShotStats, NoHoles, NoRounds),
+     training(ShotStats),
      io_lib:nl()].
 
-shot_stats(Shots, NoHoles, NoRounds) ->
+collect(Rounds) ->
+    Merged = lists:foldl(fun(R, Acc) ->
+                                 merge(merge_round(R), Acc)
+                         end, empty(), Rounds),
+    %% io:format("~p: ~p~n~n",[?LINE,Merged]),
+    sort(maps:to_list(Merged)).
+
+shot_stats(Shots, #{count := NoHoles, no_rounds := NoRounds}) ->
     [io_lib:format("~15s:   bad    ok    good    per round   per hole  total ~n", ["shoot type"]) |
      [shot_stat(Shot, NoHoles, NoRounds) || Shot <- Shots]].
 
@@ -212,24 +217,24 @@ shot_stat({Key, #{bad:=Bad,good:=Good,perfect:=Perfect}}, NoHoles, NoRounds) ->
 format_line(Type, Shots, NoHoles, NoRounds) ->
     io_lib:format("~15s ~21c ~10.2f ~10.2f ~5w~n", [Type, $\s, Shots/NoRounds, Shots/NoHoles, Shots]).
 
-putt_stats(Stat, NoHoles, NoRounds) ->
+putt_stats(#{count := NoHoles, no_rounds := NoRounds} = Stat) ->
     [format_line('putts', maps:get(putts, Stat, 0), NoHoles, NoRounds)|
      [format_line(Type, maps:get({putt,N}, Stat, 0), NoHoles, NoRounds) ||
          {Type, N} <- [{'one putt', 1}, {'two putt', 2}, {'three putt',3}, {'putt > 3', n}]]].
 
-hole_stats(Stat, NoHoles, NoRounds) ->
+hole_stats(#{count := NoHoles, no_rounds := NoRounds} = Stat) ->
     [format_line(Type, maps:get(Type, Stat, 0), NoHoles, NoRounds) ||
         Type <- [hio, albatross, eagle, birdie, par, bogey, 'double bogey', 'triple bogey', other]].
 
-play_stats(Stat, NoHoles, NoRounds) ->
+play_stats(#{count := NoHoles, no_rounds := NoRounds} = Stat) ->
     [format_line(Type, maps:get(Type, Stat, 0), NoHoles, NoRounds) ||
         Type <- [gir, 'par save', 'up and down']].
 
-score_stats(Stat, _NoHoles, _NoRounds) ->
+score_stats(Stat) ->
     [io_lib:format("Average scores:~n",[])|
      [io_lib:format(" Par ~w: ~5.2f~n", [N, maps:get({par,N}, Stat)/maps:get({par_n,N},Stat,1)]) || N <- [3,4,5]]].
 
-training(Shots, _NoHoles, _NoRounds) ->
+training(Shots) ->
     Rate = fun(Bad, _Good, _Perfect) ->
                    %% Total = Bad+Good+Perfect,
                    %% Succes = (Good+Perfect)/Total * Total/NoShots,
@@ -245,3 +250,12 @@ sort(KeyList) ->
     SortOrder = maps:from_list(SortOrderList),
     Sorted = lists:sort([{maps:get(Key,SortOrder), {Key,Data}} || {Key,Data} <- KeyList]),
     [KeyData || {_, KeyData} <- Sorted].
+
+
+print_holes(Stat) ->
+    List = lists:sort(maps:to_list(Stat)),
+    [print_hole(No, H) || {No, H} <- List, is_integer(No)].
+
+print_hole(No, #{drop:=#{bad:=Drop}} = Hole) ->
+    {Par, Shots, Putts} = hole_to_shots(Hole),
+    io:format("~.2w ~w ~.2w ~w ~w~n",[No, Par, Shots-Drop, Drop, Putts]).
