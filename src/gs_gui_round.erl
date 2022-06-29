@@ -49,6 +49,7 @@ handle_event(#wx{id=Id, event=#wxCommand{type=command_button_clicked}},
             {noreply, State0};
         _ ->
             State = handle_click(Id, State0),
+            update_shots(State),
             wxStaticText:setLabel(Stat, current(State)),
             {noreply, State}
     end;
@@ -137,6 +138,17 @@ current(#{hole_cnt:=No, hole:=Hole, total:=Total, pars:=Pars}) ->
 current(Hole, Par, Shots, Total) ->
     io_lib:format("Hole: ~.2w  Par: ~.2w   Shots: ~.2w  Total: ~.2w", [Hole, Par, Shots, Total]).
 
+update_shots(#{hole:=Hole}) ->
+    Shots = lists:seq(1, length(gs_stats:shots())),
+    Update = fun(ShotId) ->
+                     Added = maps:get(gs_stats:key(ShotId), Hole, #{default => 0}),
+                     Count = lists:sum(maps:values(Added)),
+                     StatTxt = wx:typeCast(wxWindow:findWindowById(ShotId*10), wxStaticText),
+                     wxStaticText:setLabel(StatTxt, integer_to_list(Count))
+             end,
+    [Update(Id) || Id <- Shots].
+
+
 %% Gui stuff
 add_row({Txt1, Txt2}, Panel, Sz, Id) ->
     RowSz = wxBoxSizer:new(?wxHORIZONTAL),
@@ -145,6 +157,8 @@ add_row({Txt1, Txt2}, Panel, Sz, Id) ->
     Align = [{flag, ?wxALIGN_CENTER_VERTICAL bor ?wxALL}, {border, 5}],
     wxSizer:add(RowSz, Text, Align),
     wxSizer:setItemMinSize(RowSz, Text, 80, -1),
+    Count = wxStaticText:new(Panel, Id, "0"),
+    wxSizer:add(RowSz, Count, Align),
     case Txt1 of
         "Drop" ->
             wxSizer:add(RowSz, wxButton:new(Panel, Id+1, [{label, "Drop"}]), Border);

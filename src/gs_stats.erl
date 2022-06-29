@@ -218,9 +218,9 @@ format_line(Type, Shots, NoHoles, NoRounds) ->
     io_lib:format("~15s ~21c ~10.2f ~10.2f ~5w~n", [Type, $\s, Shots/NoRounds, Shots/NoHoles, Shots]).
 
 putt_stats(#{count := NoHoles, no_rounds := NoRounds} = Stat) ->
-    [format_line('putts', maps:get(putts, Stat, 0), NoHoles, NoRounds)|
-     [format_line(Type, maps:get({putt,N}, Stat, 0), NoHoles, NoRounds) ||
-         {Type, N} <- [{'one putt', 1}, {'two putt', 2}, {'three putt',3}, {'putt > 3', n}]]].
+    [format_line('putts', maps:get(putts, Stat, 0), NoHoles, NoRounds), "\n"
+    | [format_line(Type, maps:get({putt,N}, Stat, 0), NoHoles, NoRounds) ||
+          {Type, N} <- [{'one putt', 1}, {'two putt', 2}, {'three putt',3}, {'putt > 3', n}]]].
 
 hole_stats(#{count := NoHoles, no_rounds := NoRounds} = Stat) ->
     [format_line(Type, maps:get(Type, Stat, 0), NoHoles, NoRounds) ||
