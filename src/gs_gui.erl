@@ -47,11 +47,13 @@ loop(#{frame := Frame, rounds:=Rounds, stat:=Stat} = State0) ->
         {new_round, Round} ->
             NewRounds = [Round|Rounds],
             gs_stats:save(maps:get(file,State0), NewRounds),
-            wxTextCtrl:setValue(Stat, gs_stats:print_stats([Round])),
+            wxTextCtrl:setValue(Stat, gs_stats:print_stats("", [Round])),
             Name = round_id(Round),
             Choice = maps:get(stat_sel, State0),
-            wxChoice:insert(Choice, Name, 1), %% Total is always 0
-            wxChoice:setSelection(Choice, 1),
+
+            Def = length(default_menus()),
+            wxChoice:insert(Choice, Name, Def), %% After the default stuff
+            wxChoice:setSelection(Choice, Def),
             loop(State0#{rounds:=NewRounds});
         {new_course, Course} ->
             NewCourses = [Course|maps:get(courses, State0)],
@@ -59,12 +61,10 @@ loop(#{frame := Frame, rounds:=Rounds, stat:=Stat} = State0) ->
             Dir = filename:dirname(RFile),
             gs_stats:save_courses(NewCourses, Dir),
             loop(State0#{courses:=NewCourses});
-        #wx{event=#wxCommand{type=command_choice_selected, commandInt=0}} ->
-            wxTextCtrl:setValue(Stat, gs_stats:print_stats(Rounds)),
-            loop(State0);
-        #wx{event=#wxCommand{type=command_choice_selected, commandInt=Rnd}} ->
-            Round = lists:nth(Rnd,Rounds),
-            wxTextCtrl:setValue(Stat, gs_stats:print_stats([Round])),
+        #wx{event=#wxCommand{type=command_choice_selected, commandInt=Rnd, cmdString=Str}} ->
+            try show_stats(Rnd, Str, Rounds, Stat)
+            catch _:Err:ST -> io:format("Error ~P~n ~P~n",[Err, 20, ST, 20])
+            end,
             loop(State0);
         #wx{event=#wxCommand{type=command_text_updated, cmdString=Text}} ->
             display_hcp(maps:get(hcp, State0), Text),
@@ -81,7 +81,7 @@ loop(#{frame := Frame, rounds:=Rounds, stat:=Stat} = State0) ->
 stats_page(NB, Rounds) ->
     Win = wxPanel:new(NB),
     Sz = wxBoxSizer:new(?wxVERTICAL),
-    RoundNames = ["Total"| [ round_id(Course) || Course <- Rounds]],
+    RoundNames = default_menus() ++ [ round_id(Course) || Course <- Rounds],
     Choice = wxChoice:new(Win, ?COURSE, [{size, {400,-1}}, {choices, RoundNames}]),
     wxChoice:connect(Choice,command_choice_selected),
     wxChoice:setSelection(Choice, 0),
@@ -90,12 +90,36 @@ stats_page(NB, Rounds) ->
     Text = wxTextCtrl:new(Win, ?wxID_ANY, [{style, ?wxTE_MULTILINE bor ?wxTE_RICH2 bor ?wxTE_READONLY}]),
     wxWindow:setFont(Text, Font),
     wxSizer:add(Sz, Text, [{proportion,1}, {flag, ?wxEXPAND bor ?wxALL}, {border, 10}]),
-    case gs_stats:print_stats(Rounds) of
+    case gs_stats:print_stats("Summary of all rounds", Rounds) of
         ignore -> ok;
         StatsStr -> wxTextCtrl:setValue(Text, StatsStr)
     end,
     wxWindow:setSizerAndFit(Win, Sz),
     {Win, Text, Choice}.
+
+default_menus() ->
+    ["Total", "2022", "2021", "Last 5", "Last 10"].
+
+show_stats(_, "Total", Rounds, Stat) ->
+    wxTextCtrl:setValue(Stat, gs_stats:print_stats("All Rounds", Rounds));
+show_stats(_, "2022" = Str, Rounds0, Stat) ->
+    Rounds = lists:filter(fun(#{date := [Year|_]}) -> Year =:= 2022 end, Rounds0),
+    wxTextCtrl:setValue(Stat, gs_stats:print_stats("Year " ++ Str, Rounds));
+show_stats(_, "2021" = Str, Rounds0, Stat) ->
+    Rounds = lists:filter(fun(#{date := [Year|_]}) -> Year =:= 2021 end, Rounds0),
+    wxTextCtrl:setValue(Stat, gs_stats:print_stats("Year " ++ Str, Rounds));
+show_stats(_, "Last 5" = Str, Rounds0, Stat) ->
+    {Rounds, _} = lists:split(5, Rounds0),
+    wxTextCtrl:setValue(Stat, gs_stats:print_stats(Str, Rounds));
+show_stats(_, "Last 10" = Str, Rounds0, Stat) ->
+    {Rounds, _} = lists:split(10, Rounds0),
+    wxTextCtrl:setValue(Stat, gs_stats:print_stats(Str, Rounds));
+show_stats(Sel, _, Rounds, Stat) ->
+    Def = length(default_menus()),
+    %% io:format("~p ~p => ~p~n", [Sel, Def, Sel-Def+1]),
+    Round = lists:nth(Sel-Def+1,Rounds),
+    wxTextCtrl:setValue(Stat, gs_stats:print_stats("", [Round])).
+
 
 round_id(#{course:=Name, date:=[Y,M,D]}) ->
     io_lib:format("~ts ~w-~2..0w-~2..0w", [Name,Y,M,D]).

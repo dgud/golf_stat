@@ -5,7 +5,7 @@
          keys/0, key/1, shots/0,
          read/1, save/2,
          read_courses/1, save_courses/2,
-         print_stats/1, print_holes/1
+         print_stats/2, print_holes/1
         ]).
 
 read(File) ->
@@ -160,15 +160,15 @@ sum_shot(_, Data, {Par, Shots,Putts}) ->
 sum(#{bad:=Bad,good:=Good,perfect:=Perfect}) ->
     Bad+Good+Perfect.
 
-print_stats([]) ->
+print_stats(_, []) ->
     ignore;
-print_stats([#{course:=Course0, date:=Date}]=Stat) ->
+print_stats(_, [#{course:=Course0, date:=Date}]=Stat) ->
     Course = io_lib:format("~ts Date: ~w-~2..0w-~2..0w", [Course0|Date]),
-    print_stats(Course, Stat);
-print_stats(Stats) ->
-    print_stats("Summary of all rounds", Stats).
+    print_stats_1(Course, Stat);
+print_stats(Header, Stats) ->
+    print_stats_1(Header, Stats).
 
-print_stats(What, Rounds0) ->
+print_stats_1(What, Rounds0) ->
     %% io:format("~p: ~p~n~n",[?LINE,Merged]),
     [{par, Par},{stat, Stat0}|ShotStats] = collect(Rounds0),
     NoRounds = length(Rounds0),
