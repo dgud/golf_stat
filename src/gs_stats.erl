@@ -5,7 +5,8 @@
          keys/0, key/1, shots/0,
          read/1, save/2,
          read_courses/1, save_courses/2,
-         print_stats/2, print_holes/1
+         print_stats/2, print_holes/1,
+         diagram_data/1
         ]).
 
 read(File) ->
@@ -159,6 +160,42 @@ sum_shot(_, Data, {Par, Shots,Putts}) ->
 
 sum(#{bad:=Bad,good:=Good,perfect:=Perfect}) ->
     Bad+Good+Perfect.
+
+diagram_data(Rounds) ->
+    NoRounds = length(Rounds),
+    [{par, _Par},{stat, Stat}|ShotStats] = collect(Rounds),
+
+    F = fun(P) ->
+                case P of
+                    'medium putt' -> "Med putt";
+                    'double bogey' -> "Double";
+                    'triple bogey' -> "Triple";
+                    'up and down' -> "Up&Down";
+                    _ -> io_lib:format("~s", [P])
+                end
+        end,
+    Shots = fun({drop, #{bad:=Bad}}) ->
+                    {"drop", 10*Bad / NoRounds};
+               ({Key, #{bad:=Bad,good:=Good,perfect:=Perfect}}) ->
+                    Total = (Bad+Good+Perfect),
+                    case Total of
+                        0 -> {F(Key), 100.0};
+                        _ -> {F(Key), 100*(Good+Perfect)/Total}
+                    end
+            end,
+    D1 = lists:map(Shots, ShotStats),
+    D2 = [{F(Type), maps:get({putt, N}, Stat, 0) / NoRounds} ||
+             {Type, N} <-  [{'1 putt', 1}, {'2 putt', 2}, {'3 putt',3}, {'putt > 3', n}]],
+    D3 = [{F(Type), maps:get(Type, Stat, 0) / NoRounds} ||
+             Type <- [%%hio, albatross, eagle,
+                      birdie, par,
+                      bogey, 'double bogey', 'triple bogey', other,
+                      gir, 'par save', 'up and down'
+                     ]],
+
+    Scores = [{io_lib:format("Par ~w", [N]), maps:get({par,N}, Stat, 0)/maps:get({par_n,N},Stat,1)}
+              || N <- [3,4,5]],
+    {D1,D2++D3++Scores}.
 
 print_stats(_, []) ->
     ignore;
