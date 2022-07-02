@@ -33,12 +33,11 @@ init([Parent]) ->
 
 do_init(Parent) ->
     Style = ?wxFULL_REPAINT_ON_RESIZE bor ?wxCLIP_CHILDREN,
-    Win = wxPanel:new(Parent, [{style,Style}]),
-    wxPanel:setBackgroundStyle(Win, ?wxBG_STYLE_PAINT),
-    %% {W,H} = wxWindow:getClientSize(Win),
+    Win = wxWindow:new(Parent, ?wxID_ANY, [{style,Style}]),
+    wxWindow:setBackgroundStyle(Win, ?wxBG_STYLE_PAINT),
+    wxWindow:connect(Win, paint, [callback]),
     Font = make_font(),
     Brushes = make_brushes(),
-    wxPanel:connect(Win, paint, [callback]),
     {Win, #{parent=>Parent, win=>Win, labels=>[], data=>[], font=>Font, brushes=>Brushes}}.
 
 handle_sync_event(#wx{event = #wxPaint{}}, _, #{win:=Win}=State) ->
@@ -105,7 +104,7 @@ draw(DC, #{win:=Win, font:=[Font0,Font1], brushes:=Brushes, labels:=Labels, data
                  wxGraphicsContext:drawText(Canvas, Label, X, Y),
                  {N+1, X+StrW+TW/3, Y}
          end,
-    lists:foldl(XL, {1, X0, YM+TH*2}, Labels),
+    lists:foldl(XL, {1, X0, YM+TH+5}, Labels),
 
     BW0 = ((XM-X0)/length(Data)-5)/length(Labels)-3,
     BW = max(6, BW0),
@@ -118,7 +117,7 @@ draw(DC, #{win:=Win, font:=[Font0,Font1], brushes:=Brushes, labels:=Labels, data
               end,
 
     DrawBoxes = fun({Label, D}, Start) ->
-                        wxGraphicsContext:setFont(Canvas, Font0, {0, 0, 50}),
+                        wxGraphicsContext:setFont(Canvas, Font1, {0, 0, 50}),
                         {StrW, _, _, _} = wxGraphicsContext:getTextExtent(Canvas, Label),
                         wxGraphicsContext:drawText(Canvas, Label, Start+5, YM+5),
 

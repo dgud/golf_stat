@@ -79,28 +79,36 @@ loop(#{frame := Frame, rounds:=Rounds, stat:=Stat} = State0) ->
     end.
 
 stats_page(NB, Rounds) ->
-    Win = wxPanel:new(NB),
-    Sz = wxBoxSizer:new(?wxVERTICAL),
+    Main = wxPanel:new(NB),
+    MainSz = wxBoxSizer:new(?wxHORIZONTAL),
+    {TextWin, Text, Choice} = text_stats(Main, Rounds),
+
+    DSz = wxBoxSizer:new(?wxVERTICAL),
+    D1 = diagram:start(Main),
+    wxSizer:add(DSz, D1, [{proportion, 1}, {flag, ?wxEXPAND}]),
+    D2 = diagram:start(Main),
+    wxSizer:add(DSz, D2, [{proportion, 1}, {flag, ?wxEXPAND}]),
+
+    wxSizer:add(MainSz, TextWin, [{proportion, 2}, {flag, ?wxEXPAND}]),
+    wxSizer:add(MainSz, DSz, [{proportion, 3}, {flag, ?wxEXPAND}]),
+    wxWindow:setSizer(Main, MainSz),
+    show_stats(undefined, "Total", Rounds, #{stat=>Text, diag=>[D1,D2]}),
+    {Main, Text, Choice, [D1,D2]}.
+
+text_stats(Main, Rounds) ->
+    Win = wxPanel:new(Main),
+    LSz = wxBoxSizer:new(?wxVERTICAL),
     RoundNames = default_menus() ++ [ round_id(Course) || Course <- Rounds],
     Choice = wxChoice:new(Win, ?COURSE, [{size, {400,-1}}, {choices, RoundNames}]),
     wxChoice:connect(Choice,command_choice_selected),
     wxChoice:setSelection(Choice, 0),
-    wxSizer:add(Sz, Choice, [{border, 10}, {flag, ?wxALL}]),
+    wxSizer:add(LSz, Choice, [{border, 10}, {flag, ?wxALL}]),
     Font = wxFont:new(12, ?wxMODERN, ?wxNORMAL, ?wxNORMAL),
     Text = wxTextCtrl:new(Win, ?wxID_ANY, [{style, ?wxTE_MULTILINE bor ?wxTE_RICH2 bor ?wxTE_READONLY}]),
     wxWindow:setFont(Text, Font),
-    wxSizer:add(Sz, Text, [{proportion,1}, {flag, ?wxEXPAND bor ?wxALL}, {border, 10}]),
-    DSz = wxBoxSizer:new(?wxVERTICAL),
-    D1 = diagram:start(Win),
-    wxSizer:add(DSz, D1, [{proportion, 1}, {flag, ?wxEXPAND}]),
-    D2 = diagram:start(Win),
-    wxSizer:add(DSz, D2, [{proportion, 1}, {flag, ?wxEXPAND}]),
-    HSz = wxBoxSizer:new(?wxHORIZONTAL),
-    wxSizer:add(HSz, Sz, [{proportion, 2}, {flag, ?wxEXPAND}]),
-    wxSizer:add(HSz, DSz, [{proportion, 3}, {flag, ?wxEXPAND}]),
-    wxWindow:setSizerAndFit(Win, HSz),
-    show_stats(undefined, "Total", Rounds, #{stat=>Text, diag=>[D1,D2]}),
-    {Win, Text, Choice, [D1,D2]}.
+    wxSizer:add(LSz, Text, [{proportion,1}, {flag, ?wxEXPAND bor ?wxALL}, {border, 10}]),    
+    wxWindow:setSizer(Win, LSz),
+    {Win, Text, Choice}.
 
 default_menus() ->
     ["Total", "2022", "2021", "Last 5", "Last 10"].
