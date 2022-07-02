@@ -69,7 +69,7 @@ draw(DC, #{win:=Win, font:=[Font0,Font1], brushes:=Brushes, labels:=Labels, data
     YM = H - 50,
     XM = W - 10,
 
-    wxGraphicsContext:drawLines(Canvas, [{X0,Y0}, {X0, YM}, {XM, YM}]),
+    wxGraphicsContext:drawLines(Canvas, [{X0,Y0-5}, {X0, YM}, {XM, YM}]),
 
     Max0 = lists:foldl(fun({_, Vs}, Max) -> max(Max, lists:max(Vs)) end, 0.0, Data),
     Marks = if Max0 > 100 -> lists:seq(0, 200, 50);
@@ -85,8 +85,17 @@ draw(DC, #{win:=Win, font:=[Font0,Font1], brushes:=Brushes, labels:=Labels, data
     YL = fun(V) ->
                  Str = integer_to_list(V),
                  {StrW, _, _, _} = wxGraphicsContext:getTextExtent(Canvas, Str),
-                 Where = ((Max-V)/Max)*(YM-Y0)+Y0 - TH/2.0,
-                 wxGraphicsContext:drawText(Canvas, Str, X0-15-StrW, Where)
+                 Where = ((Max-V)/Max)*(YM-Y0)+Y0,
+                 wxGraphicsContext:drawText(Canvas, Str, X0-15-StrW, Where - TH/2.0),
+                 wxGraphicsContext:drawLines(Canvas, [{X0,Where}, {XM, Where}]),
+                 case V > 0 of
+                     true ->
+                         Half = V-hd(tl(Marks))/2,
+                         Where2 = ((Max-Half)/Max)*(YM-Y0)+Y0,
+                         wxGraphicsContext:drawLines(Canvas, [{X0,Where2}, {XM, Where2}]);
+                     false ->
+                         ignore
+                 end
          end,
     lists:foreach(YL, Marks),
 
@@ -98,14 +107,14 @@ draw(DC, #{win:=Win, font:=[Font0,Font1], brushes:=Brushes, labels:=Labels, data
          end,
     lists:foldl(XL, {1, X0, YM+TH*2}, Labels),
 
-    BW0 = ((XM-X0)/length(Data)-10)/length(Labels)-4,
+    BW0 = ((XM-X0)/length(Data)-5)/length(Labels)-3,
     BW = max(6, BW0),
     DrawBox = fun(V, {N, X}) ->
                       Y = ((Max-V)/Max)*(YM-Y0)+Y0,
                       wxGraphicsContext:setBrush(Canvas, element(N, Brushes)),
                       wxGraphicsContext:drawLines(Canvas, [{X,YM+1}, {X+BW, YM+1},
                                                            {X+BW, Y}, {X,Y}, {X,YM+1}]),
-                      {N+1, X+BW+4}
+                      {N+1, X+BW+3}
               end,
 
     DrawBoxes = fun({Label, D}, Start) ->
@@ -114,7 +123,7 @@ draw(DC, #{win:=Win, font:=[Font0,Font1], brushes:=Brushes, labels:=Labels, data
                         wxGraphicsContext:drawText(Canvas, Label, Start+5, YM+5),
 
                         {_, X} = lists:foldl(DrawBox, {1, Start}, D),
-                        max(Start+StrW, X)+10
+                        max(Start+StrW, X)+5
                 end,
 
     lists:foldl(DrawBoxes, X0+5, Data),

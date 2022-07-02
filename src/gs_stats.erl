@@ -167,10 +167,10 @@ diagram_data(Rounds) ->
 
     F = fun(P) ->
                 case P of
-                    'medium putt' -> "Med putt";
+                    'medium putt'  -> "Med putt";
                     'double bogey' -> "Double";
                     'triple bogey' -> "Triple";
-                    'up and down' -> "Up&Down";
+                    'up and down'  -> "Up&Dwn";
                     _ -> io_lib:format("~s", [P])
                 end
         end,
@@ -213,7 +213,7 @@ print_stats_1(What, Rounds0) ->
     #{count := NoHoles, {par,3} := P3, {par,4} := P4, {par,5} := P5} = Stat,
     NoShots = P3+P4+P5,
     AveragePerRound = (NoShots - Par) / NoHoles * 18.0,
-    [What,
+    [What,"\n",
      io_lib:format(" Par: ~w Shots: ~w +/- ~w shots ~4.1f per 18 holes~n",
                    [Par, NoShots, NoShots - Par, AveragePerRound]),
      shot_stats(ShotStats, Stat),
@@ -236,7 +236,7 @@ collect(Rounds) ->
     sort(maps:to_list(Merged)).
 
 shot_stats(Shots, #{count := NoHoles, no_rounds := NoRounds}) ->
-    [io_lib:format("~15s:   bad    ok    good    per round   per hole  total ~n", ["shoot type"]) |
+    [io_lib:format("~12s:  bad   ok   good  per round  per hole total ~n", ["shoot type"]) |
      [shot_stat(Shot, NoHoles, NoRounds) || Shot <- Shots]].
 
 shot_stat({drop, #{bad:=Drop}}, NoHoles, NoRounds) ->
@@ -244,15 +244,15 @@ shot_stat({drop, #{bad:=Drop}}, NoHoles, NoRounds) ->
      io_lib:nl()];
 shot_stat({Key, #{bad:=Bad,good:=Good,perfect:=Perfect}}, NoHoles, NoRounds) ->
     case Bad+Good+Perfect of
-        0 -> io_lib:format("~15s~n", [Key]);
+        0 -> io_lib:format("~12s~n", [Key]);
         Total ->
-            io_lib:format("~15s ~5w% ~5w% ~5w%  ~10.2f ~10.2f ~5w~n",
+            io_lib:format("~12s ~4w% ~4w% ~4w% ~9.2f ~9.2f ~5w~n",
                       [Key, round(Bad/Total*100), round(Good/Total*100), round(Perfect/Total*100),
                        Total/NoRounds, Total/NoHoles, Total])
     end.
 
 format_line(Type, Shots, NoHoles, NoRounds) ->
-    io_lib:format("~15s ~21c ~10.2f ~10.2f ~5w~n", [Type, $\s, Shots/NoRounds, Shots/NoHoles, Shots]).
+    io_lib:format("~12s ~17c ~9.2f ~9.2f ~5w~n", [Type, $\s, Shots/NoRounds, Shots/NoHoles, Shots]).
 
 putt_stats(#{count := NoHoles, no_rounds := NoRounds} = Stat) ->
     [format_line('putts', maps:get(putts, Stat, 0), NoHoles, NoRounds), "\n"
@@ -278,8 +278,8 @@ training(Shots) ->
                    Bad
            end,
     Rated = [{Rate(Bad,Good,Perfect), What} || {What, #{bad:=Bad,good:=Good,perfect:=Perfect}} <- Shots],
-    Sorted = [What || {_, What} <- lists:reverse(lists:sort(Rated)), What =/= drop],
-    io_lib:format("Training order: ~w~n", [Sorted]).
+    Sorted = [atom_to_list(What) || {_, What} <- lists:reverse(lists:sort(Rated)), What =/= drop],
+    io_lib:format("Training order: ~s~n", [lists:join(" ", Sorted)]).
 
 
 sort(KeyList) ->
