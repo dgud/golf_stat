@@ -42,12 +42,12 @@ gui(File, Courses, Rounds) ->
            rounds=>Rounds, courses=>Courses, hcp => Hcp}),
     ok.
 
-loop(#{frame := Frame, rounds:=Rounds, stat:=Stat} = State0) ->
+loop(#{frame := Frame, rounds:=Rounds} = State0) ->
     receive
         {new_round, Round} ->
             NewRounds = [Round|Rounds],
             gs_stats:save(maps:get(file,State0), NewRounds),
-            wxTextCtrl:setValue(Stat, gs_stats:print_stats("", [Round])),
+            show_stats(undefined, "Total", NewRounds, State0),
             Name = round_id(Round),
             Choice = maps:get(stat_sel, State0),
 
@@ -120,26 +120,26 @@ show_stats(Sel, String, All, #{stat:=Stat, diag:=Ds}) ->
     {Desc, Rs, DiDa, DLs} =
         case String of
             "Total" ->
-                DD = diagram_data([All,Y21,Y22,L5], hd(All)),
+                DD = diagram_data([All,Y21,Y22,L5,[hd(All)]]),
                 {"All Rounds", All, DD, DL};
             "2022" = Str ->
-                DD = diagram_data([All,Y21,Y22,L5], hd(All)),
+                DD = diagram_data([All,Y21,Y22,L5,[hd(All)]]),
                 {"Year " ++ Str, Y22, DD, DL};
             "2021" = Str ->
-                DD = diagram_data([All,Y21,Y22,L5], hd(All)),
+                DD = diagram_data([All,Y21,Y22,L5,[hd(All)]]),
                 {"Year " ++ Str, Y21, DD, DL};
             "Last 5" = Str ->
-                DD = diagram_data([All,Y21,Y22,L5], hd(All)),
+                DD = diagram_data([All,Y21,Y22,L5,[hd(All)]]),
                 {Str, L5, DD, DL};
             "Last 10" = Str ->
-                DD = diagram_data([All,Y21,Y22,L10], hd(All)),
+                DD = diagram_data([All,Y21,Y22,L10,[hd(All)]]),
                 DL2 = ["All","2021","2022","Last 10", round_id(hd(All))],
                 {Str, L10, DD, DL2};
             _ ->
                 Def = length(default_menus()),
                 %% io:format("~p ~p => ~p~n", [Sel, Def, Sel-Def+1]),
                 Round = lists:nth(Sel-Def+1,All),
-                DD = diagram_data([All,Y21,Y22,L5], Round),
+                DD = diagram_data([All,Y21,Y22,L5,[Round]]),
                 DL2 = ["All","2021","2022","Last 5", round_id(Round)],
                 {"", [Round], DD, DL2}
         end,
@@ -161,9 +161,8 @@ update_diagram(Labels, {D11, D21}, [D1,D2]) ->
     diagram:update(D1, Labels, D11),
     diagram:update(D2, Labels, D21).
 
-diagram_data([All,Y21,Y22,L5], Round) ->
-    Rounds = [Y21,Y22,L5,[Round]],
-    {D1,D2} = gs_stats:diagram_data(All),
+diagram_data([Hd|Rounds]) ->
+    {D1,D2} = gs_stats:diagram_data(Hd),
     {D11, D21} = merge_data(Rounds, [{T,[D]} || {T,D} <- D1], [{T,[D]} || {T,D} <- D2]),
     {D11, D21}.
 

@@ -184,6 +184,18 @@ diagram_data(Rounds) ->
                     end
             end,
     D1 = lists:map(Shots, ShotStats),
+    Putting = fun() ->
+                      Bad = maps:get({putt,3}, Stat, 0) + maps:get({putt,n}, Stat, 0),
+                      Good = maps:get({putt,2}, Stat, 0),
+                      Perfect = maps:get({putt,1}, Stat, 0),
+                      Total = (Bad+Good+Perfect),
+                      case Total of
+                          0 -> {F('putts'), 100.0};
+                          _ -> {F('putts'), 100*(Good+Perfect)/Total}
+                      end
+              end,
+    Putts = [Putting()],
+
     D2 = [{F(Type), maps:get({putt, N}, Stat, 0) / NoRounds} ||
              {Type, N} <-  [{'1 putt', 1}, {'2 putt', 2}, {'3 putt',3}, {'putt > 3', n}]],
     D3 = [{F(Type), maps:get(Type, Stat, 0) / NoRounds} ||
@@ -195,7 +207,7 @@ diagram_data(Rounds) ->
 
     Scores = [{io_lib:format("Par ~w", [N]), maps:get({par,N}, Stat, 0)/maps:get({par_n,N},Stat,1)}
               || N <- [3,4,5]],
-    {D1,D2++D3++Scores}.
+    {D1++Putts,D2++D3++Scores}.
 
 print_stats(_, []) ->
     ignore;
@@ -255,7 +267,16 @@ format_line(Type, Shots, NoHoles, NoRounds) ->
     io_lib:format("~12s ~17c ~9.2f ~9.2f ~5w~n", [Type, $\s, Shots/NoRounds, Shots/NoHoles, Shots]).
 
 putt_stats(#{count := NoHoles, no_rounds := NoRounds} = Stat) ->
-    [format_line('putts', maps:get(putts, Stat, 0), NoHoles, NoRounds), "\n"
+%%    [format_line('putts', maps:get(putts, Stat, 0), NoHoles, NoRounds), "\n"
+    Bad = maps:get({putt,3}, Stat, 0) + maps:get({putt,n}, Stat, 0),
+    Good = maps:get({putt,2}, Stat, 0),
+    Perfect = maps:get({putt,1}, Stat, 0),
+    Total = maps:get(putts, Stat, 0),
+    PuttHs = Bad+Good+Perfect,
+    Putts = io_lib:format("~12s ~4w% ~4w% ~4w% ~9.2f ~9.2f ~5w~n~n",
+                          ['putts', round(Bad/PuttHs*100), round(Good/PuttHs*100),
+                           round(Perfect/PuttHs*100), Total/NoRounds, Total/NoHoles, Total]),
+    [Putts
     | [format_line(Type, maps:get({putt,N}, Stat, 0), NoHoles, NoRounds) ||
           {Type, N} <- [{'one putt', 1}, {'two putt', 2}, {'three putt',3}, {'putt > 3', n}]]].
 
