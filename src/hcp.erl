@@ -113,15 +113,25 @@ parse(String) ->
 parse([], Acc) ->
     lists:reverse(Acc);
 parse(D, Acc) ->
-    {_Line, D0} = get_integer(D),
-    {Date, D1} = get_date(D0),
-    {Club, D2} = get_string(D1),
-    {_, D3} = get_type(D2),
-    {Holes, D4} = get_integer(D3),
-    {Points, D5} = get_integer(D4),
-    {_Brutto, D6} = get_brutto(D5),
-    {Hcp, Rest} = get_float(D6),
-    Data = #hcp{date = Date, club=Club, holes=Holes, points=Points, hcp=Hcp},
+    {Data, Rest} =
+        try
+            {_Line, D0} = get_integer(D),
+            {Date, D1} = get_date(D0),
+            {Club, D2} = get_string(D1),
+            {_, D3} = get_type(D2),
+            {Holes, D4} = get_integer(D3),
+            {Points, D5} = get_integer(D4),
+            {_Brutto, D6} = get_brutto(D5),
+            {Hcp, D7} = get_float(D6),
+            {_NewHcp, D8} = get_float(D7),
+            Data0 = #hcp{date = Date, club=Club, holes=Holes, points=Points, hcp=Hcp},
+            {Data0, D8}
+        catch _:Err:ST ->
+                io:format("~p: ~p~n",[Err,ST]),
+                io:format("Data ~p~n",[lists:reverse(Acc)]),
+                io:format("Error: ~P~n",[D,10]),
+                exit(error)
+        end,
     case Rest of
         [<<" ">>|Tail] -> parse(Tail, [Data|Acc]);
         [_|_] = Tail -> parse(Tail, [Data|Acc]);
@@ -142,7 +152,9 @@ get_string([String|Rest]) ->
 get_type([TypeOrHoles|Rest]=Tokens) ->
     case string:to_integer(TypeOrHoles) of
         {error, _} -> {TypeOrHoles, Rest};
-        {_, <<>>} -> {<<>>, Tokens}
+        {_, <<>>} -> {<<>>, Tokens};
+        {_, <<"-", _/binary>>} ->
+            {<<>>, Rest}
     end.
 
 get_brutto([BruttoOrHcp|Rest]=Tokens) ->

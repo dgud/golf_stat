@@ -84,16 +84,21 @@ stats_page(NB, Rounds) ->
     {TextWin, Text, Choice} = text_stats(Main, Rounds),
 
     DSz = wxBoxSizer:new(?wxVERTICAL),
+    DR1 = wxBoxSizer:new(?wxHORIZONTAL),
+    DR2 = wxBoxSizer:new(?wxHORIZONTAL),
     D1 = diagram:start(Main),
-    wxSizer:add(DSz, D1, [{proportion, 1}, {flag, ?wxEXPAND}]),
     D2 = diagram:start(Main),
-    wxSizer:add(DSz, D2, [{proportion, 1}, {flag, ?wxEXPAND}]),
+    D3 = diagram:start(Main),
+    D4 = diagram:start(Main),
+    [wxSizer:add(DR1, D, [{proportion, 1}, {flag, ?wxEXPAND}]) || D <- [D1,D2]],
+    [wxSizer:add(DR2, D, [{proportion, 1}, {flag, ?wxEXPAND}]) || D <- [D3,D4]],
+    [wxSizer:add(DSz, D, [{proportion, 1}, {flag, ?wxEXPAND}]) || D <- [DR1,DR2]],
 
     wxSizer:add(MainSz, TextWin, [{proportion, 2}, {flag, ?wxEXPAND}]),
     wxSizer:add(MainSz, DSz, [{proportion, 3}, {flag, ?wxEXPAND}]),
     wxWindow:setSizer(Main, MainSz),
-    show_stats(undefined, "Total", Rounds, #{stat=>Text, diag=>[D1,D2]}),
-    {Main, Text, Choice, [D1,D2]}.
+    show_stats(undefined, "Total", Rounds, #{stat=>Text, diag=>[D1,D2,D3,D4]}),
+    {Main, Text, Choice, [D1,D2,D3,D4]}.
 
 text_stats(Main, Rounds) ->
     Win = wxPanel:new(Main),
@@ -114,64 +119,81 @@ default_menus() ->
     ["Total", "2022", "2021", "Last 5", "Last 10"].
 
 show_stats(Sel, String, All, #{stat:=Stat, diag:=Ds}) ->
-    [Y21,Y22,L5,L10] = split_rounds(All),
-    DL = ["All","2021","2022","Last 5", round_id(hd(All))],
+    {DiDa,LBs} = split_rounds(All),
+    DD = diagram_data(DiDa),
 
-    {Desc, Rs, DiDa, DLs} =
+    {Desc, Rs} =
         case String of
             "Total" ->
-                DD = diagram_data([All,Y21,Y22,L5,[hd(All)]]),
-                {"All Rounds", All, DD, DL};
+                {io_lib:format("All rounds (~w)", [length(All)]), All};
             "2022" = Str ->
-                DD = diagram_data([All,Y21,Y22,L5,[hd(All)]]),
-                {"Year " ++ Str, Y22, DD, DL};
+                Y22 = lists:filter(fun(#{date := [Year|_]}) -> Year =:= 2022 end, All),
+                {io_lib:format("Year ~s (~w)", [Str, length(Y22)]), Y22};
             "2021" = Str ->
-                DD = diagram_data([All,Y21,Y22,L5,[hd(All)]]),
-                {"Year " ++ Str, Y21, DD, DL};
+                Y21 = lists:filter(fun(#{date := [Year|_]}) -> Year =:= 2021 end, All),
+                {io_lib:format("Year ~s (~w)", [Str, length(Y21)]), Y21};
             "Last 5" = Str ->
-                DD = diagram_data([All,Y21,Y22,L5,[hd(All)]]),
-                {Str, L5, DD, DL};
+                {L5, _} = lists:split(5, All),
+                {Str, L5};
             "Last 10" = Str ->
-                DD = diagram_data([All,Y21,Y22,L10,[hd(All)]]),
-                DL2 = ["All","2021","2022","Last 10", round_id(hd(All))],
-                {Str, L10, DD, DL2};
+                {L10, _} = lists:split(10, All),
+                {Str, L10};
             _ ->
                 Def = length(default_menus()),
                 %% io:format("~p ~p => ~p~n", [Sel, Def, Sel-Def+1]),
                 Round = lists:nth(Sel-Def+1,All),
-                DD = diagram_data([All,Y21,Y22,L5,[Round]]),
-                DL2 = ["All","2021","2022","Last 5", round_id(Round)],
-                {"", [Round], DD, DL2}
+                {"", [Round]}
         end,
-    update_diagram(DLs,DiDa,Ds),
+    update_diagram(LBs,DD,Ds),
     wxTextCtrl:setValue(Stat, gs_stats:print_stats(Desc, Rs)).
 
 split_rounds(All) ->
     Y22 = lists:filter(fun(#{date := [Year|_]}) -> Year =:= 2022 end, All),
     Y21 = lists:filter(fun(#{date := [Year|_]}) -> Year =:= 2021 end, All),
-    try
-        {L5, _} = lists:split(5, All),
-        {L10, _} = lists:split(10, All),
-        [Y21,Y22,L5,L10]
-    catch _:_ ->
-            [Y21,Y22,[],[]]
+    AllS = io_lib:format("All(~w)", [length(All)]),
+    Y21Str = io_lib:format("2021(~w)", [length(Y21)]),
+    case Y22 of
+        [L1,L2|Rest] when Rest =/= [] ->
+            {Last, Lbls} = split(Rest, 5, 0, [[L2],[L1]], [date_str(L2,1), date_str(L1,1)]),
+            {[All,Y21|Last], [AllS, Y21Str|Lbls]};
+        [L1,L2] ->
+            {[All,Y21,[L2],[L1]], [AllS, Y21Str, date_str(L2,1), date_str(L1,1)]};
+        [L1] ->
+            {[All,Y21,[L1]], [AllS, Y21Str, date_str(L1,1)]};
+        [] ->
+            {[All,Y21], [AllS, Y21Str]}
     end.
 
-update_diagram(Labels, {D11, D21}, [D1,D2]) ->
-    diagram:update(D1, Labels, D11),
-    diagram:update(D2, Labels, D21).
+split(List, N, C, Acc, Lbls) when C < 2 ->
+    case length(List) > 2*N of
+        true ->
+            {First, Rest} = lists:split(N, List),
+            split(Rest, N, C+1, [First|Acc], [date_str(First,N)|Lbls]);
+        false ->
+            {[List|Acc], [date_str(List, length(List))|Lbls]}
+    end;
+split(List, N, _C, Acc, Lbls) ->
+    split(List, N*2, 0, Acc, Lbls).
+
+date_str([H|_], N) ->
+    date_str(H,N);
+date_str(#{date:=[_Y,M,D]}, N) ->
+    io_lib:format("~w/~w(~w)", [D,M,N]).
+
+update_diagram(Labels, AllData, Diags) ->
+    [diagram:update(Diagram, Labels, Data) || {Diagram, Data} <- lists:zip(Diags, AllData)].
 
 diagram_data([Hd|Rounds]) ->
-    {D1,D2} = gs_stats:diagram_data(Hd),
-    {D11, D21} = merge_data(Rounds, [{T,[D]} || {T,D} <- D1], [{T,[D]} || {T,D} <- D2]),
-    {D11, D21}.
+    D0 = gs_stats:diagram_data(Hd),
+    Init = [[{T,[D]} || {T,D} <- D1] || D1 <- D0],
+    merge_data(Rounds, Init).
 
-merge_data([R|Rs], D1, D2) ->
-    {R1,R2} = gs_stats:diagram_data(R),
-    merge_data(Rs, merge_data2(R1, D1), merge_data2(R2, D2));
-merge_data([], D1, D2) ->
-    {[{T,lists:reverse(D)} || {T,D} <- D1],
-     [{T,lists:reverse(D)} || {T,D} <- D2]}.
+merge_data([R|Rs], DataLists) ->
+    RDs = gs_stats:diagram_data(R),
+    Acc = [merge_data2(R1, D1) || {R1,D1} <- lists:zip(RDs,DataLists)],
+    merge_data(Rs, Acc);
+merge_data([], Acc) ->
+    [[{T,lists:reverse(D)} || {T,D} <- D1] || D1 <- Acc].
 
 merge_data2([{T,D}|R], [{T,C}|CR]) ->
     [{T,[D|C]} | merge_data2(R, CR)];

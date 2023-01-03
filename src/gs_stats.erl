@@ -184,6 +184,8 @@ diagram_data(Rounds) ->
                     end
             end,
     D1 = lists:map(Shots, ShotStats),
+    {D11,D12} = lists:splitwith(fun({K,_}) -> "long putt" =/= K end,
+                                D1),
     Putting = fun() ->
                       Bad = maps:get({putt,3}, Stat, 0) + maps:get({putt,n}, Stat, 0),
                       Good = maps:get({putt,2}, Stat, 0),
@@ -201,13 +203,15 @@ diagram_data(Rounds) ->
     D3 = [{F(Type), maps:get(Type, Stat, 0) / NoRounds} ||
              Type <- [%%hio, albatross, eagle,
                       birdie, par,
-                      bogey, 'double bogey', 'triple bogey', other,
-                      gir, 'par save', 'up and down'
+                      bogey, 'double bogey', 'triple bogey', other
+                     ]],
+    D4 = [{F(Type), maps:get(Type, Stat, 0) / NoRounds} ||
+             Type <- [ gir, 'par save', 'up and down'
                      ]],
 
     Scores = [{io_lib:format("Par ~w", [N]), maps:get({par,N}, Stat, 0)/maps:get({par_n,N},Stat,1)}
               || N <- [3,4,5]],
-    {D1++Putts,D2++D3++Scores}.
+    [D11, D12 ++ Putts, D2++D4, D3++Scores].
 
 print_stats(_, []) ->
     ignore;

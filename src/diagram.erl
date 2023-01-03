@@ -38,7 +38,8 @@ do_init(Parent) ->
     wxWindow:connect(Win, paint, [callback]),
     Font = make_font(),
     Brushes = make_brushes(),
-    {Win, #{parent=>Parent, win=>Win, labels=>[], data=>[], font=>Font, brushes=>Brushes}}.
+    Pens = make_pens(),
+    {Win, #{parent=>Parent, win=>Win, labels=>[], data=>[], font=>Font, brushes=>{Pens,Brushes}}}.
 
 handle_sync_event(#wx{event = #wxPaint{}}, _, #{win:=Win}=State) ->
     DC = wxPaintDC:new(Win),
@@ -55,7 +56,7 @@ handle_call({update, Labels, Data}, _, #{win:=Win}=State) ->
     {reply, ok, State#{labels:=Labels, data:=Data}}.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-draw(DC, #{win:=Win, font:=[Font0,Font1], brushes:=Brushes, labels:=Labels, data:=Data}) ->
+draw(DC, #{win:=Win, font:=[_Font0,Font1]=Fonts, brushes:=Brushes, labels:=Labels, data:=Data} = State) ->
     {W,H} = wxWindow:getClientSize(Win),
     Canvas = wxGraphicsContext:create(DC),
     wxGraphicsContext:setPen(Canvas, ?wxBLACK_PEN),
@@ -98,14 +99,45 @@ draw(DC, #{win:=Win, font:=[Font0,Font1], brushes:=Brushes, labels:=Labels, data
          end,
     lists:foreach(YL, Marks),
 
-    XL = fun(Label, {N, X, Y}) ->
-                 wxGraphicsContext:setFont(Canvas, Font0, element(N, colors())),
-                 {StrW, _, _, _} = wxGraphicsContext:getTextExtent(Canvas, Label),
-                 wxGraphicsContext:drawText(Canvas, Label, X, Y),
-                 {N+1, X+StrW+TW/3, Y}
-         end,
-    lists:foldl(XL, {1, X0, YM+TH+5}, Labels),
+    case maps:get(type, State, graph) of
+        bar -> drawbars(X0, XM, Y0, YM, Max, Canvas, Fonts, Brushes, Labels, Data);
+        graph ->
+            try drawgraphs(X0, XM, Y0, YM, Max, Canvas, Fonts, Brushes, Labels, Data)
+            catch _:E:ST -> io:format("~w ~0p~n",[E,ST])
+            end
+    end,
 
+    wxGraphicsContext:destroy(Canvas),
+    ok.
+
+drawgraphs(X0,XM,Y0,YM, Max, Canvas, [Font0,Font1], {Pens,_}, Labels, Data) ->
+    Step = round((XM-X0-10) / (length(Labels)-1)),
+
+    Scale = fun(Y) -> ((Max-Y)/Max)*(YM-Y0)+Y0 end,
+    Xs = lists:seq(round(X0), round(XM), round(Step)),
+
+    DrawGraph = fun({_Label, D}, PenIndex) ->
+                        wxGraphicsContext:setPen(Canvas, element(PenIndex, Pens)),
+                        Ys = [Scale(Y) || Y <- D],
+                        %% io:format("~p ~p ~p~n", [Xs,length(Xs),length(Ys)]),
+                        wxGraphicsContext:drawLines(Canvas, lists:zip(Xs,Ys)),
+                        PenIndex + 1
+                end,
+    lists:foldl(DrawGraph, 1, Data),
+    wxGraphicsContext:setFont(Canvas, Font1, {0, 0, 50}),
+    [ wxGraphicsContext:drawText(Canvas, Label, X-20, YM+5) || {Label, X} <- lists:zip(Labels, Xs)],
+
+    DrawLabel = fun({Label,_Data}, {X, ColIndex}) ->
+                           wxGraphicsContext:setFont(Canvas, Font0, element(ColIndex, colors())),
+                           {StrW, StrH, _, _} = wxGraphicsContext:getTextExtent(Canvas, Label),
+                           wxGraphicsContext:drawText(Canvas, Label, X, YM+StrH+5),
+                           {X+StrW+10, ColIndex+1}
+                end,
+    lists:foldl(DrawLabel, {X0, 1}, Data),
+    ok.
+
+
+drawbars(X0,XM,Y0,YM, Max, Canvas, [Font0,Font1], {_, Brushes}, Labels, Data) ->
     BW0 = ((XM-X0)/length(Data)-5)/length(Labels)-3,
     BW = max(6, BW0),
     DrawBox = fun(V, {N, X}) ->
@@ -126,8 +158,31 @@ draw(DC, #{win:=Win, font:=[Font0,Font1], brushes:=Brushes, labels:=Labels, data
                 end,
 
     lists:foldl(DrawBoxes, X0+5, Data),
+    XL = fun(Label, {N, X, Y}) ->
+                 wxGraphicsContext:setFont(Canvas, Font0, element(N, colors())),
+                 {StrW, _, _, _} = wxGraphicsContext:getTextExtent(Canvas, Label),
+                 wxGraphicsContext:drawText(Canvas, Label, X, Y),
+                 {N+1, X+StrW+20, Y}
+         end,
+    lists:foldl(XL, {1, X0, YM+25}, Labels).
 
-    ok.
+
+
+%% transpose([{Key, List}|Rest]) ->
+%%     transpose(Rest, [[E] || E <- List], [Key]).
+
+%% transpose([{Key, List}|Rest], Acc0, Keys) ->
+%%     Acc = transpose2(List, Acc0),
+%%     transpose(Rest, Acc, [Key|Keys]);
+%% transpose([], Acc, Keys) ->
+%%     {[lists:reverse(L) || L <- Acc],
+%%      lists:reverse(Keys)}.
+
+%% transpose2([H|T], [L1|Rest]) ->
+%%     [[H|L1]|transpose2(T,Rest)];
+%% transpose2([], []) ->
+%%     [].
+
 
 make_font() ->
     DefFont = wxSystemSettings:getFont(?wxSYS_DEFAULT_GUI_FONT),
@@ -138,6 +193,9 @@ make_font() ->
 
 make_brushes() ->
     list_to_tuple([wxBrush:new(C) || C <- tuple_to_list(colors())]).
+
+make_pens() ->
+    list_to_tuple([wxPen:new(C, [{width, 2}]) || C <- tuple_to_list(colors())]).
 
 colors() ->
     {{240, 100, 100}, {0, 128, 0},     {25, 45, 170},  {200, 130, 0},
