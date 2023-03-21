@@ -10,30 +10,104 @@
         ]).
 
 read(File) ->
+    case filename:extension(File) of
+        ".txt" -> read_erlang(File);
+        _ -> read_json(File)
+    end.
+
+read_erlang(File) ->
     case file:consult(File) of
         {ok, Data} ->
-            %% io:format("Prev: ~p~n",[Data]),
+            %% io:format("Prev: ~P~n",[Data, 10]),
+            try
+                JsonData = to_json(Data),
+                FileWOExt = filename:rootname(File),
+                FileJson = FileWOExt ++ ".json",
+                io:format("Convert to file: ~s~n",[FileJson]),
+                ok = file:write_file(FileJson, JsonData)
+            catch _:Reason:ST ->
+                    io:format("error: ~p~n ~W~n", [Reason, ST, 20])
+            end,
             Data;
         {error, enoent} ->
             io:format("Starting new data, File not found: ~s~n",[File]),
             []
     end.
 
+read_json(File) ->
+    {ok, Bin} = file:read_file(File),
+    Rounds = jsone:decode(Bin, [{keys, atom}]),
+    ConvRound = fun(Map) ->
+                        All = [{convert_key_from_json(Key), convert_val_from_json(Val)} || {Key,Val} <- maps:to_list(Map)],
+                        maps:from_list(All)
+                end,
+    [ConvRound(R) || R <- Rounds].
+
+convert_key_from_json(Key) ->
+    case string:to_integer(atom_to_binary(Key)) of
+        {Int, <<>>} when is_integer(Int) ->
+            Int;
+        _ ->
+            Key
+    end.
+
+convert_val_from_json(Val) when is_map(Val) ->
+    Val;
+convert_val_from_json(Val) when is_integer(Val) ->
+    Val;
+convert_val_from_json(Val) when is_binary(Val) ->
+    String = unicode:characters_to_list(Val),
+    try convert_to_date(String) of
+        Date -> Date
+    catch _:_ ->
+            String
+    end.
+
+convert_to_date(Str0) ->
+    {Year, [$-|Str1]} = string:to_integer(Str0),
+    {Month, [$-|Str2]} = string:to_integer(Str1),
+    {Day, _} = string:to_integer(Str2),
+    [Year, Month, Day].
+
+
+to_json(Data) ->
+    ConvRound = fun(Map) ->
+                        All = [{convert_key_to_json(Key), convert_val_to_json(Val)} || {Key,Val} <- maps:to_list(Map)],
+                        maps:from_list(All)
+                end,
+    PreJson = [ConvRound(R) || R <- Data],
+    jsone:encode(PreJson, [native_utf8, {space, 0}, {indent, 1}]).
+
+convert_key_to_json(Int) when is_integer(Int) ->
+    integer_to_binary(Int);
+convert_key_to_json(Key) ->
+    Key.
+
+convert_val_to_json([Y,M,D]) when is_integer(Y), Y > 2000 ->
+    {{Y,M,D},{10,0,0}};
+convert_val_to_json(String) when is_list(String) ->
+    unicode:characters_to_binary(String);
+convert_val_to_json(Int) when is_integer(Int) ->
+    Int;
+convert_val_to_json(Map) when is_map(Map) ->
+    Map.
+
 save(File, Data) ->
     Formatted = [io_lib:format("~p.~n", [Course]) || Course <- Data],
     _ = file:rename(File, File ++ ".old"),
-    file:write_file(File, unicode:characters_to_binary(Formatted)).
+    Json = to_json(Data),
+    file:write_file(Json, unicode:characters_to_binary(Formatted)).
 
 read_courses(Dir) ->
-    {ok, Bin} = file:read_file(filename:join(Dir, "courses.txt")),
+    {ok, Bin} = file:read_file(filename:join(Dir, "courses.json")),
     Courses = jsone:decode(Bin, [{keys, atom}]),
-    %% io:format("~p~n",[Courses]),
+    %% io:format("~tp~n",[Courses]),
     Prefixed = [{Name,Course} ||  #{name:=Name} = Course <- Courses],
     [Course || {_, Course} <- lists:sort(Prefixed)].
 
 save_courses(Courses, Dir) ->
     Encoded = jsone:encode(Courses, [native_utf8, {space, 0}, {indent, 1}]),
-    ok = file:write_file(filename:join(Dir,"courses.txt"), Encoded).
+    ok = file:write_file(filename:join(Dir,"courses.json"), Encoded).
 
 %% Hole
 empty() ->
