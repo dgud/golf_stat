@@ -93,10 +93,9 @@ convert_val_to_json(Map) when is_map(Map) ->
     Map.
 
 save(File, Data) ->
-    Formatted = [io_lib:format("~p.~n", [Course]) || Course <- Data],
     _ = file:rename(File, File ++ ".old"),
     Json = to_json(Data),
-    file:write_file(Json, unicode:characters_to_binary(Formatted)).
+    file:write_file(File, Json).
 
 read_courses(Dir) ->
     {ok, Bin} = file:read_file(filename:join(Dir, "courses.json")),
