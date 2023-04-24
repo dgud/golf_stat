@@ -28,7 +28,7 @@ start(File, Stop) ->
 
 gui(File, Courses, Rounds) ->
     wx:new(),
-    Frame = wxFrame:new(wx:null(), ?wxID_ANY, "Golf Stats", [{size, {1800, 950}}]),
+    Frame = wxFrame:new(wx:null(), ?wxID_ANY, "Golf Stats", [{size, {1400, 950}}]),
     wxFrame:connect(Frame, close_window),
     NB = wxNotebook:new(Frame, ?wxID_ANY),
     {AddText,Stat, StatSel, Diags} = stats_page(NB, Rounds),
@@ -81,24 +81,38 @@ loop(#{frame := Frame, rounds:=Rounds} = State0) ->
 stats_page(NB, Rounds) ->
     Main = wxPanel:new(NB),
     MainSz = wxBoxSizer:new(?wxHORIZONTAL),
+    Background = wxScrolledWindow:new(Main),
+    wxScrolledWindow:setScrollRate(Background, 5, 25),
+    wxScrolledWindow:setBackgroundColour(Background, {250, 250, 250}),
+
     {TextWin, Text, Choice} = text_stats(Main, Rounds),
 
     DSz = wxBoxSizer:new(?wxVERTICAL),
-    DR1 = wxBoxSizer:new(?wxHORIZONTAL),
-    DR2 = wxBoxSizer:new(?wxHORIZONTAL),
-    D1 = diagram:start(Main),
-    D2 = diagram:start(Main),
-    D3 = diagram:start(Main),
-    D4 = diagram:start(Main),
-    [wxSizer:add(DR1, D, [{proportion, 1}, {flag, ?wxEXPAND}]) || D <- [D1,D2]],
-    [wxSizer:add(DR2, D, [{proportion, 1}, {flag, ?wxEXPAND}]) || D <- [D3,D4]],
-    [wxSizer:add(DSz, D, [{proportion, 1}, {flag, ?wxEXPAND}]) || D <- [DR1,DR2]],
+    Diags = [diagram:start(Background) ||
+                _ <- lists:seq(1,7)],
 
-    wxSizer:add(MainSz, TextWin, [{proportion, 2}, {flag, ?wxEXPAND}]),
-    wxSizer:add(MainSz, DSz, [{proportion, 3}, {flag, ?wxEXPAND}]),
+    Texts = [wxStaticText:new(Background, ?wxID_ANY, Str) ||
+                Str <- ["Long game", "Short game", "Putting", "Average # of putts", "Saves", "Hole Stats", "Shots"]],
+
+    Fix = fun(ST) ->
+                  Font = wxStaticText:getFont(ST),
+                  wxFont:setPointSize(Font,15),
+                  wxStaticText:setFont(ST, Font),
+                  wxStaticText:setBackgroundColour(Background, {250, 250, 250})
+          end,
+    [Fix(St) || St <- Texts],
+
+    Widgets = lists:flatten(lists:zipwith(fun(X, Y) -> [X,Y] end, Texts, Diags)),
+    [wxSizer:add(DSz, D, [{flag, ?wxEXPAND}]) || D <- Widgets],
+
+    wxWindow:setSizer(Background, DSz),
+    wxSizer:layout(DSz),
+
+    wxSizer:add(MainSz, TextWin, [{proportion, 1}, {flag, ?wxEXPAND}]),
+    wxSizer:add(MainSz, Background, [{proportion, 1}, {flag, ?wxEXPAND}]),
     wxWindow:setSizer(Main, MainSz),
-    show_stats(undefined, "Total", Rounds, #{stat=>Text, diag=>[D1,D2,D3,D4]}),
-    {Main, Text, Choice, [D1,D2,D3,D4]}.
+    show_stats(undefined, "Total", Rounds, #{stat=>Text, diag=>Diags}),
+    {Main, Text, Choice, Diags}.
 
 text_stats(Main, Rounds) ->
     Win = wxPanel:new(Main),

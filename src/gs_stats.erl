@@ -248,7 +248,7 @@ diagram_data(Rounds) ->
                 end
         end,
     Shots = fun({drop, #{bad:=Bad}}) ->
-                    {"drop", 10*Bad / NoRounds};
+                    {"drop", Bad / NoRounds};
                ({Key, #{bad:=Bad,good:=Good,perfect:=Perfect}}) ->
                     Total = (Bad+Good+Perfect),
                     case Total of
@@ -257,8 +257,10 @@ diagram_data(Rounds) ->
                     end
             end,
     D1 = lists:map(Shots, ShotStats),
-    {D11,D12} = lists:splitwith(fun({K,_}) -> "long putt" =/= K end,
+    {D11,D12} = lists:splitwith(fun({K,_}) -> "pitch" =/= K end,
                                 D1),
+    {D13,[Drop|D14]} = lists:splitwith(fun({K,_}) -> "drop" =/= K end,
+                                D12),
     Putting = fun() ->
                       Bad = maps:get({putt,3}, Stat, 0) + maps:get({putt,n}, Stat, 0),
                       Good = maps:get({putt,2}, Stat, 0),
@@ -279,12 +281,11 @@ diagram_data(Rounds) ->
                       bogey, 'double bogey', 'triple bogey', other
                      ]],
     D4 = [{F(Type), maps:get(Type, Stat, 0) / NoRounds} ||
-             Type <- [ gir, 'par save', 'up and down'
-                     ]],
+             Type <- [ gir, 'par save', 'up and down' ]],
 
     Scores = [{io_lib:format("Par ~w", [N]), maps:get({par,N}, Stat, 0)/maps:get({par_n,N},Stat,1)}
               || N <- [3,4,5]],
-    [D11, D12 ++ Putts, D2++D4, D3++Scores].
+    [D11, D13, D14 ++ Putts, D2, D4 ++ [Drop], D3, Scores].
 
 print_stats(_, []) ->
     ignore;

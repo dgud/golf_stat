@@ -33,13 +33,15 @@ init([Parent]) ->
 
 do_init(Parent) ->
     Style = ?wxFULL_REPAINT_ON_RESIZE bor ?wxCLIP_CHILDREN,
-    Win = wxWindow:new(Parent, ?wxID_ANY, [{style,Style}]),
+    Win = wxWindow:new(Parent, ?wxID_ANY, [{style,Style}, {size, {-1, 400}}]),
     wxWindow:setBackgroundStyle(Win, ?wxBG_STYLE_PAINT),
+    wxWindow:setBackgroundColour(Win, {250, 250, 250}),
     wxWindow:connect(Win, paint, [callback]),
     Font = make_font(),
     Brushes = make_brushes(),
     Pens = make_pens(),
-    {Win, #{parent=>Parent, win=>Win, labels=>[], data=>[], font=>Font, brushes=>{Pens,Brushes}}}.
+    {Win, #{parent=>Parent, type=>bar, win=>Win, labels=>[], data=>[],
+            font=>Font, brushes=>{Pens,Brushes}}}.
 
 handle_sync_event(#wx{event = #wxPaint{}}, _, #{win:=Win}=State) ->
     DC = wxPaintDC:new(Win),
@@ -138,8 +140,8 @@ drawgraphs(X0,XM,Y0,YM, Max, Canvas, [Font0,Font1], {Pens,_}, Labels, Data) ->
 
 
 drawbars(X0,XM,Y0,YM, Max, Canvas, [Font0,Font1], {_, Brushes}, Labels, Data) ->
-    BW0 = ((XM-X0)/length(Data)-5)/length(Labels)-3,
-    BW = max(6, BW0),
+    BW0 = ((XM-X0)/(2*length(Labels)-4))/length(Data),
+    BW = max(6, min(10, BW0)),
     DrawBox = fun(V, {N, X}) ->
                       Y = ((Max-V)/Max)*(YM-Y0)+Y0,
                       wxGraphicsContext:setBrush(Canvas, element(N, Brushes)),
@@ -154,7 +156,7 @@ drawbars(X0,XM,Y0,YM, Max, Canvas, [Font0,Font1], {_, Brushes}, Labels, Data) ->
                         wxGraphicsContext:drawText(Canvas, Label, Start+5, YM+5),
 
                         {_, X} = lists:foldl(DrawBox, {1, Start}, D),
-                        max(Start+StrW, X)+5
+                        max(Start+StrW, X)+BW+2
                 end,
 
     lists:foldl(DrawBoxes, X0+5, Data),
