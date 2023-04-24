@@ -116,7 +116,7 @@ text_stats(Main, Rounds) ->
     {Win, Text, Choice}.
 
 default_menus() ->
-    ["Total", "2022", "2021", "Last 5", "Last 10"].
+    ["Total", "2023", "2022", "2021", "Last 5", "Last 10"].
 
 show_stats(Sel, String, All, #{stat:=Stat, diag:=Ds}) ->
     {DiDa,LBs} = split_rounds(All),
@@ -126,6 +126,9 @@ show_stats(Sel, String, All, #{stat:=Stat, diag:=Ds}) ->
         case String of
             "Total" ->
                 {io_lib:format("All rounds (~w)", [length(All)]), All};
+            "2023" = Str ->
+                Y22 = lists:filter(fun(#{date := [Year|_]}) -> Year =:= 2023 end, All),
+                {io_lib:format("Year ~s (~w)", [Str, length(Y22)]), Y22};
             "2022" = Str ->
                 Y22 = lists:filter(fun(#{date := [Year|_]}) -> Year =:= 2022 end, All),
                 {io_lib:format("Year ~s (~w)", [Str, length(Y22)]), Y22};
@@ -148,20 +151,22 @@ show_stats(Sel, String, All, #{stat:=Stat, diag:=Ds}) ->
     wxTextCtrl:setValue(Stat, gs_stats:print_stats(Desc, Rs)).
 
 split_rounds(All) ->
+    Y23 = lists:filter(fun(#{date := [Year|_]}) -> Year =:= 2023 end, All),
     Y22 = lists:filter(fun(#{date := [Year|_]}) -> Year =:= 2022 end, All),
     Y21 = lists:filter(fun(#{date := [Year|_]}) -> Year =:= 2021 end, All),
     AllS = io_lib:format("All(~w)", [length(All)]),
     Y21Str = io_lib:format("2021(~w)", [length(Y21)]),
-    case Y22 of
-        [L1,L2|Rest] when Rest =/= [] ->
-            {Last, Lbls} = split(Rest, 5, 0, [[L2],[L1]], [date_str(L2,1), date_str(L1,1)]),
-            {[All,Y21|Last], [AllS, Y21Str|Lbls]};
-        [L1,L2] ->
-            {[All,Y21,[L2],[L1]], [AllS, Y21Str, date_str(L2,1), date_str(L1,1)]};
+    Y22Str = io_lib:format("2022(~w)", [length(Y22)]),
+    case All of
         [L1] ->
-            {[All,Y21,[L1]], [AllS, Y21Str, date_str(L1,1)]};
+            {[All,Y21,Y22,[L1]], [AllS, Y21Str, Y22Str, date_str(L1,1)]};
+        [L1,L2] ->
+            {[All,Y21,Y22,[L2],[L1]], [AllS, Y21Str, Y22Str, date_str(L2,1), date_str(L1,1)]};
+        [L1,L2|Rest] ->
+            {Last, Lbls} = split(Rest, 5, 0, [[L2],[L1]], [date_str(L2,1), date_str(L1,1)]),
+            {[All,Y21,Y22|Last], [AllS, Y21Str, Y22Str|Lbls]};
         [] ->
-            {[All,Y21], [AllS, Y21Str]}
+            {[All,Y21,Y22], [AllS, Y21Str, Y22Str]}
     end.
 
 split(List, N, C, Acc, Lbls) when C < 2 ->
