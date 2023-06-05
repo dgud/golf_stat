@@ -92,7 +92,7 @@ stats_page(NB, Rounds) ->
                 _ <- lists:seq(1,7)],
 
     Texts = [wxStaticText:new(Background, ?wxID_ANY, Str) ||
-                Str <- ["Long game", "Short game", "Putting", "Average # of putts", "Saves", "Hole Stats", "Shots"]],
+                Str <- ["Long game", "Short game", "Putting", "Number of putts", "Saves and Drops", "Hole Stats", "Shots"]],
 
     Fix = fun(ST) ->
                   Font = wxStaticText:getFont(ST),
@@ -165,23 +165,29 @@ show_stats(Sel, String, All, #{stat:=Stat, diag:=Ds}) ->
     wxTextCtrl:setValue(Stat, gs_stats:print_stats(Desc, Rs)).
 
 split_rounds(All) ->
-    Y23 = lists:filter(fun(#{date := [Year|_]}) -> Year =:= 2023 end, All),
-    Y22 = lists:filter(fun(#{date := [Year|_]}) -> Year =:= 2022 end, All),
-    Y21 = lists:filter(fun(#{date := [Year|_]}) -> Year =:= 2021 end, All),
-    AllS = io_lib:format("All(~w)", [length(All)]),
-    Y21Str = io_lib:format("2021(~w)", [length(Y21)]),
-    Y22Str = io_lib:format("2022(~w)", [length(Y22)]),
-    case All of
-        [L1] ->
-            {[All,Y21,Y22,[L1]], [AllS, Y21Str, Y22Str, date_str(L1,1)]};
-        [L1,L2] ->
-            {[All,Y21,Y22,[L2],[L1]], [AllS, Y21Str, Y22Str, date_str(L2,1), date_str(L1,1)]};
-        [L1,L2|Rest] ->
-            {Last, Lbls} = split(Rest, 5, 0, [[L2],[L1]], [date_str(L2,1), date_str(L1,1)]),
-            {[All,Y21,Y22|Last], [AllS, Y21Str, Y22Str|Lbls]};
-        [] ->
-            {[All,Y21,Y22], [AllS, Y21Str, Y22Str]}
+    {CurrentYear, _, _} = erlang:date(),
+    CombinedYearData = split_years(CurrentYear, All),
+
+    case CombinedYearData of
+        [{This,_},{Prev,_}|Old] when length(This) < 17 ->
+            {Data1, Label1} = split_current(This),
+            {Data2, Label2} = split(Prev, 5,0, Data1, Label1),
+            {YearData, YearLabels} = lists:unzip(lists:reverse(Old)),
+            {YearData ++ Data2, YearLabels ++ Label2};
+        [This|Old] ->
+            {Data1, Label1} = split_current(This),
+            {YearData, YearLabels} = lists:unzip(lists:reverse(Old)),
+            {YearData ++ Data1, YearLabels ++ Label1}
     end.
+
+split_current([]) ->
+    {[], []};
+split_current([L1]) ->
+    {[L1], [date_str(L1,1)]};
+split_current([L1,L2]) ->
+    {[[L2],[L1]], [date_str(L2,1), date_str(L1,1)]};
+split_current([L1,L2|Rest]) ->
+    split(Rest, 5,0, [[L2],[L1]], [date_str(L2,1), date_str(L1,1)]).
 
 split(List, N, C, Acc, Lbls) when C < 2 ->
     case length(List) > 2*N of
@@ -194,10 +200,22 @@ split(List, N, C, Acc, Lbls) when C < 2 ->
 split(List, N, _C, Acc, Lbls) ->
     split(List, N*2, 0, Acc, Lbls).
 
+split_years(Current, Rounds) ->
+    {YearRs,Older} = lists:splitwith(fun(#{date := [Year|_]}) -> Year =:= Current end, Rounds),
+    Data = {YearRs, date_str(Current, length(YearRs))},
+    case Older of
+        [] ->
+            [Data];
+        _ ->
+            [Data|split_years(Current-1, Older)]
+    end.
+
 date_str([H|_], N) ->
     date_str(H,N);
 date_str(#{date:=[_Y,M,D]}, N) ->
-    io_lib:format("~w/~w(~w)", [D,M,N]).
+    io_lib:format("~w/~w(~w)", [D,M,N]);
+date_str(Year, N) when is_integer(Year) ->
+    io_lib:format("~w(~w)", [Year, N]).
 
 update_diagram(Labels, AllData, Diags) ->
     [diagram:update(Diagram, Labels, Data) || {Diagram, Data} <- lists:zip(Diags, AllData)].
