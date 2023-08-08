@@ -31,15 +31,20 @@ gui(File, Courses, Rounds) ->
     Frame = wxFrame:new(wx:null(), ?wxID_ANY, "Golf Stats", [{size, {1400, 950}}]),
     wxFrame:connect(Frame, close_window),
     NB = wxNotebook:new(Frame, ?wxID_ANY),
-    {AddText,Stat, StatSel, Diags} = stats_page(NB, Rounds),
-    wxBookCtrlBase:addPage(NB, AddText, "View Statistics", []),
-    AddCourse = gs_gui_round:start(NB, self(), Courses),
-    wxBookCtrlBase:addPage(NB, AddCourse, "Add Round", []),
-    {AddHcp,Hcp} = hcp_page(NB),
-    wxBookCtrlBase:addPage(NB, AddHcp, "Calculate HCP", []),
-    wxFrame:show(Frame),
-    loop(#{file => File, frame => Frame, stat => Stat, stat_sel => StatSel, diag => Diags,
-           rounds=>Rounds, courses=>Courses, hcp => Hcp}),
+    try
+        {AddText,Stat, StatSel, Diags} = stats_page(NB, Rounds),
+        wxBookCtrlBase:addPage(NB, AddText, "View Statistics", []),
+        AddCourse = gs_gui_round:start(NB, self(), Courses),
+        wxBookCtrlBase:addPage(NB, AddCourse, "Add Round", []),
+        {AddHcp,Hcp} = hcp_page(NB),
+        wxBookCtrlBase:addPage(NB, AddHcp, "Calculate HCP", []),
+        wxFrame:show(Frame),
+        loop(#{file => File, frame => Frame, stat => Stat, stat_sel => StatSel, diag => Diags,
+               rounds=>Rounds, courses=>Courses, hcp => Hcp})
+    catch Err:Reason:ST ->
+            io:format("~p ~P~n ~P~n",[Err,Reason,20,ST,30]),
+            error(sorry)
+    end,
     ok.
 
 loop(#{frame := Frame, rounds:=Rounds} = State0) ->
@@ -169,12 +174,12 @@ split_rounds(All) ->
     CombinedYearData = split_years(CurrentYear, All),
 
     case CombinedYearData of
-        [{This,_},{Prev,_}|Old] when length(This) < 17 ->
+        [{This,_},{Prev,_}|Old] when length(This) < 7 ->
             {Data1, Label1} = split_current(This),
             {Data2, Label2} = split(Prev, 5,0, Data1, Label1),
             {YearData, YearLabels} = lists:unzip(lists:reverse(Old)),
             {YearData ++ Data2, YearLabels ++ Label2};
-        [This|Old] ->
+        [{This, _}|Old] ->
             {Data1, Label1} = split_current(This),
             {YearData, YearLabels} = lists:unzip(lists:reverse(Old)),
             {YearData ++ Data1, YearLabels ++ Label1}
