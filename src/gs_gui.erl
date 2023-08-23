@@ -62,15 +62,16 @@ loop(#{frame := Frame, rounds:=Rounds} = State0) ->
     receive
         {new_round, Round} ->
             NewRounds = [Round|Rounds],
-            gs_stats:save(maps:get(file,State0), NewRounds),
-            show_stats(undefined, "Total", NewRounds, State0),
+            gs_stats:save(maps:get(file,State0), sort_rounds(NewRounds)),
             Name = round_id(Round),
             Choice = maps:get(stat_sel, State0),
 
             Def = length(default_menus()),
             wxChoice:insert(Choice, Name, Def), %% After the default stuff
             wxChoice:setSelection(Choice, Def),
-            loop(State0#{rounds:=NewRounds});
+            State = State0#{rounds:=NewRounds},
+            show_stats(Def, Name, NewRounds, State),
+            loop(State);
         {new_course, Course} ->
             NewCourses = [Course|maps:get(courses, State0)],
             RFile = maps:get(file, State0),
@@ -215,7 +216,7 @@ split(List, N, C, Acc, Lbls) when C < 2 ->
 split(List, N, _C, Acc, Lbls) ->
     split(List, N*2, 0, Acc, Lbls).
 
-split_years(Current, Rounds) ->
+split_years(Current, Rounds) when Current > 1900 ->
     {YearRs,Older} = lists:splitwith(fun(#{date := [Year|_]}) -> Year =:= Current end, Rounds),
     Data = {YearRs, date_str(Current, length(YearRs))},
     case Older of
@@ -258,6 +259,10 @@ merge_data2([], []) ->
 
 round_id(#{course:=Name, date:=[Y,M,D]}) ->
     io_lib:format("~ts ~w-~2..0w-~2..0w", [Name,Y,M,D]).
+
+sort_rounds(Rounds) ->
+    Order = fun(#{date := A},#{date := B}) -> A >= B end,
+    lists:sort(Order, Rounds).
 
 set_icon(Frame) ->
     Filename = "golf-hole.png",

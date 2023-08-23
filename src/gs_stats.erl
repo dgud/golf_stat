@@ -43,10 +43,19 @@ read_json(File) ->
                                 maps:from_list(All)
                         end,
             [ConvRound(R) || R <- Rounds];
-        {error, enoent} ->
-            io:format("Starting new data, File not found: ~s~n",[File]),
+        {error, _} ->
+            show_error(io_lib:format("Starting new data, File not found: ~s~n", [File])),
             []
     end.
+
+%% show_error(enoent, What) ->
+%%     show_error(io_lib:format("Could not find file: ~p~n",[What])).
+
+show_error(String) when is_list(String) ->
+    io:put_chars(user, String),
+    MD = wxMessageDialog:new(wx:new(), String),
+    wxMessageDialog:showModal(MD),
+    wxMessageDialog:destroy(MD).
 
 convert_key_from_json(Key) ->
     case string:to_integer(atom_to_binary(Key)) of

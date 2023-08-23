@@ -3,10 +3,10 @@ golf_stat
 
 A collection of some golf statistics tools
 
-Build
+Build (on Windows)
 -----
 
-    $ rebar3 compile
+    $ rebar3 compile && ./make_release && (cd golfstat/; cmd.exe /C golf_stat.cmd [PersonalFile])
 
 Run
 -----

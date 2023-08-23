@@ -11,6 +11,7 @@
 -define(RESET, 3).
 -define(DONE, 4).
 -define(COURSE, 5).
+-define(DATE, 6).
 
 start(Notebook, Parent, Courses) ->
     wx_object:start_link(?MODULE, [Notebook, Parent, Courses], []).
@@ -20,11 +21,20 @@ init([NoteBook, Parent, Courses]) ->
     Win = wxPanel:new(NoteBook),
     Sz = wxBoxSizer:new(?wxVERTICAL),
     wxSizer:addSpacer(Sz, 5),
+
     CourseNames = ["Add New Course"|[Name || #{name:=Name} <- Courses]],
     CourseChoice = wxChoice:new(Win, ?COURSE, [{size, {400,-1}}, {choices, CourseNames}]),
     wxChoice:connect(CourseChoice,command_choice_selected),
-    wxSizer:add(Sz, CourseChoice, [{border, 50}, {flag, ?wxLEFT}]),
-    wxSizer:addSpacer(Sz, 20),
+    ChSz = wxBoxSizer:new(?wxHORIZONTAL),
+    wxSizer:add(ChSz, wxStaticText:new(Win, ?wxID_ANY, "Course: ", [{size, {80,-1}}])),
+    wxSizer:add(ChSz, CourseChoice),
+    wxSizer:add(Sz, ChSz, [{border, 15}, {flag, ?wxLEFT}]),
+
+    DP = wxDatePickerCtrl:new(Win, ?DATE, [{style, ?wxDP_DROPDOWN}, {size, {100, -1}}]),
+    wxDatePickerCtrl:connect(DP, date_changed, []),
+    wxSizer:add(Sz, DP, [{border, 95}, {flag, ?wxLEFT}]),
+
+    wxSizer:addSpacer(Sz, 30),
     Stat = wxStaticText:new(Win, ?wxID_ANY, current(1, 0, 0, 0)),
     wxSizer:add(Sz, Stat, [{border, 50}, {flag, ?wxLEFT}]),
     lists:foldl(fun(Strs, Acc) -> add_row(Strs, Win, Sz, Acc), Acc+10 end, 10, gs_stats:shots()),
@@ -32,8 +42,10 @@ init([NoteBook, Parent, Courses]) ->
 
     wxWindow:connect(Win, command_button_clicked),
     wxWindow:setSizerAndFit(Win, Sz),
-    {Win, #{stat=>Stat, parent=>Parent, courses=>Courses, course=>undefined, pars=>[],
-            hole_cnt=>1, hole=>gs_stats:empty(), round=>#{}, total=>0, frame => NoteBook}}.
+    {Win, #{stat => Stat, parent => Parent, courses => Courses, frame => NoteBook,
+            course => undefined, date => tuple_to_list(date()),
+            pars => [], hole_cnt => 1, hole => gs_stats:empty(),
+            round => #{}, total => 0}}.
 
 handle_event(#wx{id=?DONE, event=#wxCommand{type=command_button_clicked}}, #{stat:=Stat} = State0) ->
     State = handle_click(?DONE, State0),
@@ -64,6 +76,9 @@ handle_event(#wx{event=#wxCommand{type=command_choice_selected, commandInt=Sel}}
     State = State0#{course:=Name, pars:=Pars},
     wxStaticText:setLabel(Stat, current(State)),
     {noreply, State};
+
+handle_event(#wx{id=?DATE, event=#wxDate{date={Date,_Time}}}, State) ->
+    {noreply, State#{date := tuple_to_list(Date)}};
 
 handle_event(Msg, State0) ->
     io:format("Unhandled Msg: ~p~n",[Msg]),
@@ -108,27 +123,36 @@ handle_click(?PREVIOUS, #{hole_cnt:=HoleNo, round:=Round} = State0) ->
 handle_click(?RESET, #{hole := Hole, total := Total} = State0) ->
     Shots = gs_stats:no_shots(Hole),
     State0#{hole := gs_stats:empty(), total := Total-Shots};
-handle_click(?DONE, #{total:=Total, hole_cnt:=Cnt, course:=Course, parent:=Parent} = State) ->
+handle_click(?DONE, #{total:=Total, hole_cnt:=Cnt, course:=Course, date:=Date, parent:=Parent} = State) ->
     case Course /= undefined andalso Cnt > 1 andalso Total > 0 of
         false -> State;
         true ->
             #{round:=Round0} = add_hole(State),
             Round1 = gs_stats:set_round_data(course, unicode:characters_to_list(Course), Round0),
-            Round = gs_stats:set_round_data(date, tuple_to_list(date()), Round1),
+            Round = gs_stats:set_round_data(date, Date, Round1),
             Parent ! {new_round, Round},
             State#{hole_cnt=>1, hole=>gs_stats:empty(), round=>#{}, total=>0}
     end;
 handle_click(Button, #{hole:=Hole, total:=Total} = State) ->
     ShotId = Button div 10,
     Shot = gs_stats:key(ShotId),
+    Prev = maps:get(Shot, Hole),
     Result = case Button rem 10 of
                  1 -> bad;
                  2 -> good;
-                 3 -> perfect
+                 3 -> perfect;
+                 4 -> reset
              end,
-    Prev = maps:get(Shot, Hole),
-    Update = Hole#{Shot => maps:update_with(Result, fun(V) -> V + 1 end, Prev)},
-    State#{hole:=Update, total:=Total+1}.
+    {Counters, Shots} =
+        case Result of
+            reset ->
+                #{bad := S0, good := S1, perfect := S2} = Prev,
+                {#{bad => 0, good => 0, perfect => 0}, -S0-S1-S2};
+            _Other ->
+                {maps:update_with(Result, fun(V) -> V + 1 end, Prev), 1}
+        end,
+    Update = Hole#{Shot => Counters},
+    State#{hole:=Update, total:=Total+Shots}.
 
 current(#{hole_cnt:=No, hole:=Hole, total:=Total, pars:=Pars}) ->
     Shots = gs_stats:no_shots(Hole),
@@ -153,7 +177,7 @@ update_shots(#{hole:=Hole}) ->
 add_row({Txt1, Txt2}, Panel, Sz, Id) ->
     RowSz = wxBoxSizer:new(?wxHORIZONTAL),
     Text = wxStaticText:new(Panel, ?wxID_ANY, Txt1),
-    Border = [{border, 5}, {flag, ?wxALL}],
+    Border = [{border, 3}, {flag, ?wxALL}],
     Align = [{flag, ?wxALIGN_CENTER_VERTICAL bor ?wxALL}, {border, 5}],
     wxSizer:add(RowSz, Text, Align),
     wxSizer:setItemMinSize(RowSz, Text, 80, -1),
@@ -161,11 +185,15 @@ add_row({Txt1, Txt2}, Panel, Sz, Id) ->
     wxSizer:add(RowSz, Count, Align),
     case Txt1 of
         "Drop" ->
-            wxSizer:add(RowSz, wxButton:new(Panel, Id+1, [{label, "Drop"}]), Border);
+            wxSizer:add(RowSz, wxButton:new(Panel, Id+1, [{label, "Drop"}]), Border),
+            wxSizer:addSpacer(RowSz, 5),
+            wxSizer:add(RowSz, wxButton:new(Panel, Id+4, [{label, "Reset"}]), Border);
         _ ->
             wxSizer:add(RowSz, wxButton:new(Panel, Id+1, [{label, "Bad"}]), Border),
             wxSizer:add(RowSz, wxButton:new(Panel, Id+2, [{label, "Ok"}]), Border),
-            wxSizer:add(RowSz, wxButton:new(Panel, Id+3, [{label, "Great"}]), Border)
+            wxSizer:add(RowSz, wxButton:new(Panel, Id+3, [{label, "Great"}]), Border),
+            wxSizer:addSpacer(RowSz, 5),
+            wxSizer:add(RowSz, wxButton:new(Panel, Id+4, [{label, "Reset"}]), Border)
     end,
     wxSizer:add(RowSz, wxStaticText:new(Panel, ?wxID_ANY, Txt2), Align),
     wxSizer:add(Sz, RowSz, [{border, 10}, {flag, ?wxLEFT}]).
