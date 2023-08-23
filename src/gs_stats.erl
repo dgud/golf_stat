@@ -35,13 +35,18 @@ read_erlang(File) ->
     end.
 
 read_json(File) ->
-    {ok, Bin} = file:read_file(File),
-    Rounds = jsone:decode(Bin, [{keys, atom}]),
-    ConvRound = fun(Map) ->
-                        All = [{convert_key_from_json(Key), convert_val_from_json(Val)} || {Key,Val} <- maps:to_list(Map)],
-                        maps:from_list(All)
-                end,
-    [ConvRound(R) || R <- Rounds].
+    case file:read_file(File) of
+        {ok, Bin} ->
+            Rounds = jsone:decode(Bin, [{keys, atom}]),
+            ConvRound = fun(Map) ->
+                                All = [{convert_key_from_json(Key), convert_val_from_json(Val)} || {Key,Val} <- maps:to_list(Map)],
+                                maps:from_list(All)
+                        end,
+            [ConvRound(R) || R <- Rounds];
+        {error, enoent} ->
+            io:format("Starting new data, File not found: ~s~n",[File]),
+            []
+    end.
 
 convert_key_from_json(Key) ->
     case string:to_integer(atom_to_binary(Key)) of
@@ -98,11 +103,17 @@ save(File, Data) ->
     file:write_file(File, Json).
 
 read_courses(Dir) ->
-    {ok, Bin} = file:read_file(filename:join(Dir, "courses.json")),
-    Courses = jsone:decode(Bin, [{keys, atom}]),
-    %% io:format("~tp~n",[Courses]),
-    Prefixed = [{Name,Course} ||  #{name:=Name} = Course <- Courses],
-    [Course || {_, Course} <- lists:sort(Prefixed)].
+    File = filename:join(Dir, "courses.json"),
+    case file:read_file(File) of
+        {ok, Bin} ->
+            Courses = jsone:decode(Bin, [{keys, atom}]),
+            %% io:format("~tp~n",[Courses]),
+            Prefixed = [{Name,Course} ||  #{name:=Name} = Course <- Courses],
+            [Course || {_, Course} <- lists:sort(Prefixed)];
+        {error, enoent} ->
+            io:format("Could not find \"courses.json\" file~n Looking at: ~s~n",[File]),
+            error({error, "courses.json not found"})
+    end.
 
 save_courses(Courses, Dir) ->
     Encoded = jsone:encode(Courses, [native_utf8, {space, 0}, {indent, 1}]),
@@ -235,7 +246,7 @@ sum(#{bad:=Bad,good:=Good,perfect:=Perfect}) ->
     Bad+Good+Perfect.
 
 diagram_data(Rounds) ->
-    NoRounds = length(Rounds),
+    NoRounds = max(length(Rounds), 1),
     [{par, _Par},{stat, Stat}|ShotStats] = collect(Rounds),
 
     F = fun(P) ->
@@ -290,7 +301,7 @@ diagram_data(Rounds) ->
     [D11, D13, D14 ++ [PuttPercent], D2 ++ [PuttPerHole], D4 ++ [Drop], D3, Scores].
 
 print_stats(_, []) ->
-    ignore;
+    "No stats available";
 print_stats(_, [#{course:=Course0, date:=Date}]=Stat) ->
     Course = io_lib:format("~ts Date: ~w-~2..0w-~2..0w", [Course0|Date]),
     print_stats_1(Course, Stat);
@@ -320,6 +331,17 @@ print_stats_1(What, Rounds0) ->
      training(ShotStats),
      io_lib:nl()].
 
+
+collect([]) ->
+    Stat = #{count => 0, {par,3} => 0, {par_n,4} => 1,
+             {par, 4} => 0, {par, 5} => 0,
+             gir=> 0, 'par save' => 0, 'up and down' => 0,
+             putts => 0, {putt,0} => 1,
+             hio => 0, albatross => 0, eagle => 0, birdie => 0, par => 0,
+             bogey => 0, 'double bogey' => 0, 'triple bogey' => 0, other => 0
+            },
+    Empty = merge(#{stat => Stat, par => 4}, empty()),
+    sort(maps:to_list(Empty));
 collect(Rounds) ->
     Merged = lists:foldl(fun(R, Acc) ->
                                  merge(merge_round(R), Acc)

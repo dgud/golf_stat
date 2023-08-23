@@ -1,6 +1,6 @@
 -module(gs_gui).
 
--export([start/0, start/1, start_halt/1]).
+-export([start/0, start/1, start_halt/0, start_halt/1]).
 
 -include_lib("wx/include/wx.hrl").
 -define(COURSE, 5).
@@ -15,6 +15,16 @@ start("") ->
     usage();
 start(File) ->
     start(File, false).
+
+start_halt() ->
+    FileName = case os:getenv("USERNAME") of
+               false -> "player.json";
+               Name -> Name ++ ".json"
+           end,
+    LibDir = filename:absname(code:lib_dir(golf_stat)),
+    Dir = filename:dirname(filename:dirname(LibDir)),
+    File = filename:join(Dir, FileName),
+    start(File, true).
 
 start_halt(File) ->
     start(File, true).
@@ -172,7 +182,6 @@ show_stats(Sel, String, All, #{stat:=Stat, diag:=Ds}) ->
 split_rounds(All) ->
     {CurrentYear, _, _} = erlang:date(),
     CombinedYearData = split_years(CurrentYear, All),
-
     case CombinedYearData of
         [{This,_},{Prev,_}|Old] when length(This) < 7 ->
             {Data1, Label1} = split_current(This),
@@ -188,7 +197,7 @@ split_rounds(All) ->
 split_current([]) ->
     {[], []};
 split_current([L1]) ->
-    {[L1], [date_str(L1,1)]};
+    {[[L1]], [date_str(L1,1)]};
 split_current([L1,L2]) ->
     {[[L2],[L1]], [date_str(L2,1), date_str(L1,1)]};
 split_current([L1,L2|Rest]) ->
@@ -225,6 +234,10 @@ date_str(Year, N) when is_integer(Year) ->
 update_diagram(Labels, AllData, Diags) ->
     [diagram:update(Diagram, Labels, Data) || {Diagram, Data} <- lists:zip(Diags, AllData)].
 
+diagram_data([]) ->
+    D0 = gs_stats:diagram_data([]),
+    Init = [[{T,[D]} || {T,D} <- D1] || D1 <- D0],
+    merge_data([], Init);
 diagram_data([Hd|Rounds]) ->
     D0 = gs_stats:diagram_data(Hd),
     Init = [[{T,[D]} || {T,D} <- D1] || D1 <- D0],
