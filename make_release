@@ -1,0 +1,335 @@
+#!/usr/bin/env escript
+%% -*- erlang -*-
+%%
+%%  release --
+%%
+%%     Release wings into the given target directory.
+%%
+%%  Copyright (c) 2014-2022 Bjorn Gustavsson
+%%
+%%  See the file "license.terms" for information on usage and redistribution
+%%  of this file, and for a DISCLAIMER OF ALL WARRANTIES.
+%%
+-mode(compile).
+
+-include_lib("kernel/include/file.hrl").
+
+main(_) ->
+    try
+        {ok, Top} = file:get_cwd(),
+        put(top_dir, Top),
+	release(),
+	init:stop(0)
+    catch
+	throw:{fatal,Reason} ->
+	    io:put_chars(Reason),
+	    erlang:halt(10);
+	Class:Error:Stk ->
+	    io:format("~p:~p in ~p\n", [Class,Error,Stk]),
+	    erlang:halt(20)
+    end.
+
+release() ->
+    Build = filename:absname("golfstat"),
+    run("rm", ["-rf",Build]),
+    _ = file:make_dir(Build),
+    case filelib:wildcard(filename:join(Build, "*")) of
+	[] ->
+	    ok;
+	[_|_] ->
+	    fatal("Directory \"~s\" is not empty\n", [Build])
+    end,
+    win_release(Build, "1.0"),
+    set_cwd(get(top_dir)),
+    {ok, _} = zip:create("golfstat.zip", ["golfstat"]),
+    ok.
+
+win_release(Root, _Vsn) ->
+    BitSize = case is_wslcross() of
+                  true ->  %% We use the native erlang to decide bitsize
+                      WsStr = os_erl("-eval \"erlang:display(erlang:system_info(wordsize))\" -run erlang halt"),
+                      {WS, _} = string:to_integer(WsStr),
+                      WS*8;
+                  _ ->
+                      erlang:system_info(wordsize)*8
+              end,
+    release_otp(Root, BitSize),
+    set_cwd(filename:join(get(top_dir), "priv")),
+    WinFiles = ["golf_stat.cmd", "golf-hole.ico", "courses.json"],
+    [copy(File, Root) || File <- WinFiles],
+    set_cwd(Root),
+    ok.
+
+release_otp(TargetDir0, BitSize) ->
+    TargetDir = filename:absname(TargetDir0),
+    Lib = filename:join(TargetDir, "lib"),
+    [copy_app(App, Lib, BitSize) || App <- dep_apps()],
+    copy_erts(TargetDir),
+    ok.
+
+copy_erts(TargetDir) ->
+    WinDeps =
+        case os_erl("-eval \"erlang:display(erlang:system_info(otp_release))\" -run erlang halt") of
+            "24" -> ["werl"];
+            "25" -> ["werl"];
+            _ -> []
+        end,
+    Files = case os_type() of
+		{unix,_} ->
+		    %% Do not copy to erts-VSN/bin, then the start scripts must find
+		    %% erts-VSN in start script
+		    {["beam.smp","erlexec","inet_gethost","escript", "erl_child_setup"], []};
+		{win32,nt} ->
+		    %% To get Windows working without install, erts-VSN must exist
+		    {["erl.exe", "escript.exe"|WinDeps],
+		     ["erlexec.dll", "beam.smp.dll","inet_gethost.exe"]}
+	    end,
+    copy_erts(TargetDir, Files).
+
+copy_erts(TargetDir, {BinExecFiles, ErtsExecFiles}) ->
+    Root = case is_wslcross() of
+               true ->
+                   WinPath = os_erl("-eval  \"erlang:display(code:root_dir())\" -run erlang halt"),
+                   string:chomp(os:cmd("wslpath -u " ++ WinPath));
+               false -> code:root_dir()
+           end,
+
+    ErtsDirWithVersion = filename:basename(lib_dir(erts)),
+    ErtsPath = filename:join([Root,ErtsDirWithVersion]),
+
+    %% Hard code erts version 0 so that we do not need to figure
+    %% that out in installer package
+    TargetBin = filename:join(TargetDir, "bin"),
+    TargetErts = filename:join([TargetDir, "erts-0", "bin"]),
+
+    set_cwd(filename:join(ErtsPath, "bin")),
+    [copy(File, TargetErts) || File <- ErtsExecFiles],
+    [copy(File, TargetBin) || File <- BinExecFiles],
+    set_cwd(filename:join(Root, "bin")),
+    copy("start.boot", TargetBin),
+    copy("no_dot_erlang.boot", TargetBin),
+    ok.
+
+copy_app(App0, Lib, BitSize) ->
+    AppDir = lib_dir(App0),
+    io:format("\r\nCOPY ~p from ~p\r\n",[App0, AppDir]),
+    set_cwd(AppDir),
+    set_cwd(".."),
+    App = list_to_atom(filename:basename(AppDir)),
+    Wcs = [["ebin","*.{beam,bundle,png,lang,app}"],
+	   ["priv","*.{so,dll,png}"]
+	  ],
+    Files = lists:foldl(fun(Wc0, Acc) ->
+				Wc = filename:join([App|Wc0]),
+				Res = filelib:wildcard(Wc) ++ Acc,
+				Res
+			end, [], Wcs),
+    _ = [copy(File, Lib, BitSize) || File <- Files],
+    fix_app_version(App0, Lib),
+    ok.
+
+copy(S, T) ->
+    copy(S, T, undefined).
+
+copy(Source, Target0, BitSize) ->
+    Target = filename:join(Target0, Source),
+    ok = filelib:ensure_dir(Target),
+    try
+	case ext(filename:extension(Source)) of
+	    {binary,beam} ->
+		{ok,Beam} = file:read_file(Source),
+		{ok,{_,Stripped}} = beam_lib:strip(Beam),
+		ok = file:write_file(Target, Stripped),
+		%% Only allow read access.
+		ok = file:write_file_info(Target, #file_info{mode=8#444});
+            {text,data} ->
+                {ok,_} = file:copy(Source, Target),
+                ok = file:write_file_info(Target, #file_info{mode=8#666});
+            {text,_} ->
+                {ok,_} = file:copy(Source, Target),
+                ok = file:write_file_info(Target, #file_info{mode=8#444});
+            {image, _} ->
+                {ok,_} = file:copy(Source, Target),
+                ok = file:write_file_info(Target, #file_info{mode=8#444});
+
+	    {_, Ext} ->
+		%% Could be an executable file. Make sure that we preserve
+		%% the execution bit. Always turn off the write bit.
+		{ok,_} = file:copy(Source, Target),
+		{ok,#file_info{mode=Mode}} = file:read_file_info(Source),
+                {ok,Info0} = file:read_file_info(Target),
+		Info = Info0#file_info{mode=Mode band 8#555},
+		ok = file:write_file_info(Target, Info),
+		case Mode band 8#111 of
+		    0 when Ext =/= dll ->
+			ok;
+		    _ ->
+			%% Strip all executable files.
+                        check_build_target(Target, BitSize),
+			strip(Target)
+		end
+	end
+    catch error:Reason ->
+	    fatal("failed: copy ~ts ~ts~n\t with: ~p~n",[filename:absname(Source), Target, Reason])
+    end,
+    ok.
+
+
+set_cwd(Path) ->
+    case file:set_cwd(Path) of
+        ok -> ok;
+        Err ->
+            io:format("Error: ~p in ~p~n", [Err, process_info(self(), current_stacktrace)]),
+            fatal("Could not 'cwd' to ~ts~n", [Path])
+    end.
+
+%% WSLcross have no idea about file-modes explicit check extensions
+ext(".beam") -> {binary, beam};
+ext(".png")  -> {image, png};
+ext(".bin")  -> {image, bin};
+ext(".bundle")  -> {image, bundle};
+ext(".lang") -> {text, lang};
+ext(".json")  -> {text, data};
+ext(".app")  -> {text, app};
+ext(".cl")   -> {text, shader};
+ext(".glsl") -> {text, shader};
+ext(".fs")   -> {text, shader};
+ext(".vs")   -> {text, shader};
+ext(".auv")  -> {text, shader};
+ext(".plist") -> {text, plist};
+ext("." ++ Rest) -> {unknown, list_to_atom(Rest)};
+ext("") -> {unknown, []}.
+
+
+fix_app_version(App0, Lib) ->
+    AppDir = lib_dir(App0),
+    App = atom_to_list(App0),
+    case filename:basename(AppDir) of
+	App ->
+	    VsnVar = string:to_upper(App) ++ "_VSN",
+	    Vsn = get_vsn(filename:join(AppDir, "vsn.mk"), VsnVar),
+	    set_cwd(Lib),
+	    case file:rename(App, App++"-"++Vsn) of
+		ok -> ok;
+		Error ->
+		    io:format("ERROR: cd ~p~n  ~p => ~p ~n", 
+			      [Lib, App, App++"-"++Vsn]),
+		    error(Error)
+	    end;
+	_ ->
+	    ok
+    end.
+
+strip(File) ->
+    case os_type() of
+	{unix,darwin} ->
+	    os:cmd("strip -S " ++ File);
+	{unix,linux} ->
+	    os:cmd("strip --strip-debug --strip-unneeded " ++ File);
+	_ ->
+	    ok
+    end.
+
+get_vsn(VsnFile, VsnVar) ->
+    case file:read_file(VsnFile) of
+        {ok,Bin} ->
+            Re = "^" ++ VsnVar ++ "\\s*=\\s*(\\S+)\\s*$",
+            {match,[Vsn]} = re:run(Bin, Re, [multiline,{capture,all_but_first,binary}]),
+            binary_to_list(Vsn);
+        {error, enoent} ->
+            DirPath = filename:dirname(VsnFile),
+            DirName = filename:basename(DirPath),
+            Appfile = filename:join([filename:dirname(VsnFile), ebin, DirName ++ ".app"]),
+            io:format("Reading: ~p~n",[Appfile]),
+            {ok, List} = file:consult(Appfile),
+            {_, _AppName, AppDefs} = lists:keyfind(application, 1, List),
+            {_, Vsn} = lists:keyfind(vsn, 1, AppDefs),
+            Vsn
+    end.
+
+run(Prog0, Args) ->
+    Prog = case os:find_executable(Prog0) of
+	       false ->
+		   fatal("~s not found (or not in $path)", [Prog0]);
+	       Path ->
+		   Path
+	   end,
+    P = open_port({spawn_executable,Prog},
+		  [{args,Args},binary,in,eof]),
+    get_data(P).
+
+get_data(Port) ->
+    get_data(Port, <<>>).
+
+get_data(Port, Sofar) ->
+    receive
+	{Port,eof} ->
+	    erlang:port_close(Port),
+	    Sofar;
+	{Port,{data,Bytes}} ->
+	    get_data(Port, <<Sofar/binary,Bytes/binary>>);
+	{'EXIT',Port, _} ->
+	    Sofar
+    end.
+
+dep_apps() ->
+    [kernel,stdlib,wx,golf_stat].
+
+check_build_target(_File, undefined) -> true;
+check_build_target(File, Bits) ->
+    case re:run(os:cmd("file " ++ File), "x86-64")  of
+        {match, _} when Bits =:= 64 -> true;
+        nomatch when Bits =:= 32 -> true;
+        _ -> error({badtarget, Bits, File})
+    end.
+
+os_type() ->
+    case os:type() of
+        {unix,linux} = Linux ->
+            case is_wslcross() of
+                true -> {win32,nt};
+                _ -> Linux
+            end;
+        Native ->
+            Native
+    end.
+
+is_wslcross() ->
+    case get(wslcross) of
+        undefined ->
+            Res = case os:getenv("WSLcross") of
+                      "true" -> true;
+                      _ -> false
+                  end,
+            put(wslcross, Res),
+            Res;
+        Res ->
+            Res
+    end.
+
+fatal(Format, Args) ->
+    throw({fatal,["release: "|io_lib:format(Format, Args)]}).
+
+lib_dir(App) ->
+    case is_wslcross() of
+        true when App /= golf_stat ->
+            Str = io_lib:format("-eval  \"erlang:display(code:lib_dir(~s))\" -run erlang halt", [App]),
+            WinPath = os_erl(lists:flatten(Str)),
+            string:chomp(os:cmd("wslpath -u " ++ WinPath));
+        _ ->
+            case code:lib_dir(App) of
+                {error,_} ->  %% ERL_LIBS is not set
+                    case App of
+                        golf_stat -> filename:join([get(top_dir),"_build/default/lib/golf_stat"])
+                    end;
+                Dir -> Dir
+            end
+    end.
+
+os_erl(Str) ->
+    case is_wslcross() of
+        true ->
+            os:cmd("erl.exe -noshell " ++ lists:flatten(Str));
+        false ->
+            os:cmd("erl -noshell " ++ lists:flatten(Str))
+    end.

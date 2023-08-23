@@ -48,6 +48,7 @@ gui(File, Courses, Rounds) ->
         wxBookCtrlBase:addPage(NB, AddCourse, "Add Round", []),
         {AddHcp,Hcp} = hcp_page(NB),
         wxBookCtrlBase:addPage(NB, AddHcp, "Calculate HCP", []),
+        set_icon(Frame),
         wxFrame:show(Frame),
         loop(#{file => File, frame => Frame, stat => Stat, stat_sel => StatSel, diag => Diags,
                rounds=>Rounds, courses=>Courses, hcp => Hcp})
@@ -257,6 +258,19 @@ merge_data2([], []) ->
 
 round_id(#{course:=Name, date:=[Y,M,D]}) ->
     io_lib:format("~ts ~w-~2..0w-~2..0w", [Name,Y,M,D]).
+
+set_icon(Frame) ->
+    Filename = "golf-hole.png",
+    Dir = code:priv_dir(golf_stat),
+    File = filename:join(Dir, Filename),
+    Image = wxImage:new(File),
+    Bitmap = wxBitmap:new(Image),
+    Icon = wxIcon:new(),
+    wxIcon:copyFromBitmap(Icon, Bitmap),
+    wxImage:destroy(Image),
+    wxBitmap:destroy(Bitmap),
+    wxFrame:setIcon(Frame, Icon).
+
 
 hcp_page(NB) ->
     Win = wxPanel:new(NB),
