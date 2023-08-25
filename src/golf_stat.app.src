@@ -1,10 +1,11 @@
 {application, golf_stat,
- [{description, "An OTP library"},
+ [{description, "A golf stat analyzer"},
   {vsn, "0.1.0"},
   {registered, []},
   {applications,
    [kernel,
-    stdlib
+    stdlib,
+    wx
    ]},
   {env,[]},
   {modules, []},

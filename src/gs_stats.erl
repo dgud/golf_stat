@@ -5,7 +5,7 @@
          keys/0, key/1, shots/0,
          read/1, save/2,
          read_courses/1, save_courses/2,
-         print_stats/2, print_holes/1,
+         print_stats/3, print_holes/1,
          diagram_data/1
         ]).
 
@@ -309,36 +309,37 @@ diagram_data(Rounds) ->
               || N <- [3,4,5]],
     [D11, D13, D14 ++ [PuttPercent], D2 ++ [PuttPerHole], D4 ++ [Drop], D3, Scores].
 
-print_stats(_, []) ->
+print_stats(_, [], _) ->
     "No stats available";
-print_stats(_, [#{course:=Course0, date:=Date}]=Stat) ->
+print_stats(_, [#{course:=Course0, date:=Date}]=Stat, Rest) ->
     Course = io_lib:format("~ts Date: ~w-~2..0w-~2..0w", [Course0|Date]),
-    print_stats_1(Course, Stat);
-print_stats(Header, Stats) ->
-    print_stats_1(Header, Stats).
+    print_stats_1(Course, Stat, Rest);
+print_stats(Header, Stats, Rest) ->
+    print_stats_1(Header, Stats, Rest).
 
-print_stats_1(What, Rounds0) ->
+print_stats_1(What, Rounds0, Rest) ->
     %% io:format("~p: ~p~n~n",[?LINE,Merged]),
-    [{par, Par},{stat, Stat0}|ShotStats] = collect(Rounds0),
-    NoRounds = length(Rounds0),
-    Stat = Stat0#{no_rounds => NoRounds},
+    [{par, Par},{stat, Stat}|ShotStats] = collect(Rounds0),
+    RestStats = Rest /= [] andalso collect(Rest),
+
     #{count := NoHoles, {par,3} := P3, {par,4} := P4, {par,5} := P5} = Stat,
     NoShots = P3+P4+P5,
     AveragePerRound = (NoShots - Par) / NoHoles * 18.0,
     [What,"\n",
      io_lib:format(" Par: ~w Shots: ~w +/- ~w shots ~4.1f per 18 holes~n",
                    [Par, NoShots, NoShots - Par, AveragePerRound]),
-     shot_stats(ShotStats, Stat),
-     putt_stats(Stat),
+     shot_stats(ShotStats, Stat, RestStats),
+     putt_stats(Stat, RestStats),
      io_lib:nl(),
-     hole_stats(Stat),
+     hole_stats(Stat, RestStats),
      io_lib:nl(),
-     play_stats(Stat),
+     play_stats(Stat, RestStats),
      io_lib:nl(),
-     score_stats(Stat),
+     score_stats(Stat, RestStats),
      io_lib:nl(),
      training(ShotStats),
-     io_lib:nl()].
+     io_lib:nl()
+    ].
 
 
 collect([]) ->
@@ -347,62 +348,116 @@ collect([]) ->
              gir=> 0, 'par save' => 0, 'up and down' => 0,
              putts => 0, {putt,0} => 1,
              hio => 0, albatross => 0, eagle => 0, birdie => 0, par => 0,
-             bogey => 0, 'double bogey' => 0, 'triple bogey' => 0, other => 0
+             bogey => 0, 'double bogey' => 0, 'triple bogey' => 0, other => 0,
+             no_rounds => 0
             },
     Empty = merge(#{stat => Stat, par => 4}, empty()),
     sort(maps:to_list(Empty));
 collect(Rounds) ->
-    Merged = lists:foldl(fun(R, Acc) ->
-                                 merge(merge_round(R), Acc)
-                         end, empty(), Rounds),
+    Merged = #{stat := Stat} =
+        lists:foldl(fun(R, Acc) ->
+                            merge(merge_round(R), Acc)
+                    end, empty(), Rounds),
     %% io:format("~p: ~p~n~n",[?LINE,Merged]),
-    sort(maps:to_list(Merged)).
+    sort(maps:to_list(Merged#{stat := Stat#{no_rounds => length(Rounds)}})).
 
-shot_stats(Shots, #{count := NoHoles, no_rounds := NoRounds}) ->
+shot_stats(Shots, #{count := NoHoles}, RestRounds) ->
+    Rest = case RestRounds of
+               [_,{stat,#{count:=RN}}|RestShots] ->
+                   {RN,RestShots};
+               false ->
+                   false
+           end,
     [io_lib:format("~12s:  bad   ok   good  per round  per hole total ~n", ["shoot type"]) |
-     [shot_stat(Shot, NoHoles, NoRounds) || Shot <- Shots]].
+     [shot_stat(Shot, NoHoles, Rest) || Shot <- Shots]].
 
-shot_stat({drop, #{bad:=Drop}}, NoHoles, NoRounds) ->
-    [format_line(drop, Drop, NoHoles, NoRounds),
-     io_lib:nl()];
-shot_stat({Key, #{bad:=Bad,good:=Good,perfect:=Perfect}}, NoHoles, NoRounds) ->
-    case Bad+Good+Perfect of
-        0 -> io_lib:format("~12s~n", [Key]);
-        Total ->
+shot_stat({drop, #{bad:=Drop}}, NoHoles, Rest) ->
+    String = case Rest of
+                 false -> format_line(drop, Drop, NoHoles);
+                 {RN,RestShots} ->
+                     {_, #{bad:=RBad}} = lists:keyfind(drop, 1, RestShots),
+                     format_line(drop, Drop, NoHoles, RBad/RN*18, fun lessthan/2)
+             end,
+    [String, io_lib:nl()];
+shot_stat({Key, #{bad:=Bad,good:=Good,perfect:=Perfect}}, NoHoles, Rest) ->
+    case {Bad+Good+Perfect, Rest} of
+        {0,_} -> io_lib:format("~12s~n", [Key]);
+        {Total, false} ->
             io_lib:format("~12s ~4w% ~4w% ~4w% ~9.2f ~9.2f ~5w~n",
-                      [Key, round(Bad/Total*100), round(Good/Total*100), round(Perfect/Total*100),
-                       Total/NoRounds, Total/NoHoles, Total])
+                          [Key, round(Bad/Total*100), round(Good/Total*100), round(Perfect/Total*100),
+                           Total/NoHoles*18, Total/NoHoles, Total]);
+        {Total, {_N,List}} when is_list(List) ->
+            {_, #{bad:=RBad,good:=RG,perfect:=RP}} = lists:keyfind(Key, 1, List),
+            RTotal = RBad+ RG + RP,
+            [_, Trend, _] = greathan((Good+Perfect)/Total, (RG+RP)/RTotal),
+            io_lib:format("~12s ~4w% ~4w% ~4w% ~9.2f ~9.2f ~5w  ~ts~n",
+                          [Key, round(Bad/Total*100), round(Good/Total*100), round(Perfect/Total*100),
+                           Total/NoHoles*18, Total/NoHoles, Total, Trend])
     end.
 
-format_line(Type, Shots, NoHoles, NoRounds) ->
-    io_lib:format("~12s ~17c ~9.2f ~9.2f ~5w~n", [Type, $\s, Shots/NoRounds, Shots/NoHoles, Shots]).
 
-putt_stats(#{count := NoHoles, no_rounds := NoRounds} = Stat) ->
+putt_stats(#{count := NoHoles} = Stat, Rest) ->
 %%    [format_line('putts', maps:get(putts, Stat, 0), NoHoles, NoRounds), "\n"
     Bad = maps:get({putt,3}, Stat, 0) + maps:get({putt,n}, Stat, 0),
     Good = maps:get({putt,2}, Stat, 0),
     Perfect = maps:get({putt,1}, Stat, 0),
     Total = maps:get(putts, Stat, 0),
     PuttHs = Bad+Good+Perfect,
-    Putts = io_lib:format("~12s ~4w% ~4w% ~4w% ~9.2f ~9.2f ~5w~n~n",
-                          ['putts', round(Bad/PuttHs*100), round(Good/PuttHs*100),
-                           round(Perfect/PuttHs*100), Total/NoRounds, Total/NoHoles, Total]),
-    [Putts
-    | [format_line(Type, maps:get({putt,N}, Stat, 0), NoHoles, NoRounds) ||
-          {Type, N} <- [{'one putt', 1}, {'two putt', 2}, {'three putt',3}, {'putt > 3', n}]]
+    Putts = case Rest of
+                false ->
+                    io_lib:format("~12s ~4w% ~4w% ~4w% ~9.2f ~9.2f ~5w~n~n",
+                                  ['putts', round(Bad/PuttHs*100), round(Good/PuttHs*100),
+                                   round(Perfect/PuttHs*100), Total/NoHoles*18, Total/NoHoles, Total]);
+                [_,{stat,RStat}|_] ->
+                    RTotal = maps:get(putts, RStat, 0),
+                    RN = maps:get(count, RStat),
+                    [PPR|Trend] = lessthan(Total/NoHoles*18,RTotal/RN*18),
+                    io_lib:format("~12s ~4w% ~4w% ~4w% ~9.2f ~9.2f ~5w  ~ts (~.2f)~n~n",
+                                  ['putts', round(Bad/PuttHs*100), round(Good/PuttHs*100),
+                                   round(Perfect/PuttHs*100), PPR, Total/NoHoles, Total|Trend])
+            end,
+    [Putts| [stat_line(Type, {putt,N}, Stat, Rest) ||
+                {Type, N} <- [{'one putt', 1}, {'two putt', 2}, {'three putt',3}, {'putt > 3', n}]]
     ].
 
-hole_stats(#{count := NoHoles, no_rounds := NoRounds} = Stat) ->
-    [format_line(Type, maps:get(Type, Stat, 0), NoHoles, NoRounds) ||
+hole_stats(Stat, Rest) ->
+    [stat_line(Type, Stat, Rest) ||
         Type <- [hio, albatross, eagle, birdie, par, bogey, 'double bogey', 'triple bogey', other]].
 
-play_stats(#{count := NoHoles, no_rounds := NoRounds} = Stat) ->
-    [format_line(Type, maps:get(Type, Stat, 0), NoHoles, NoRounds) ||
+play_stats(Stat, Rest) ->
+    [stat_line(Type, Stat, Rest) ||
         Type <- [gir, 'par save', 'up and down']].
 
-score_stats(Stat) ->
+score_stats(Stat, false) ->
     [io_lib:format("Average scores:~n",[])|
-     [io_lib:format(" Par ~w: ~5.2f~n", [N, maps:get({par,N}, Stat)/maps:get({par_n,N},Stat,1)]) || N <- [3,4,5]]].
+     [io_lib:format(" Par ~w: ~5.2f~n", [N, maps:get({par,N}, Stat)/maps:get({par_n,N},Stat,1)]) 
+      || N <- [3,4,5]]];
+score_stats(Stat, [_, {stat, Rest}|_]) ->
+    [io_lib:format("Average scores: (all)~n", [])|
+     [io_lib:format(" Par ~w: ~5.2f ~ts (~.2f)~n",
+                    [N|lessthan(
+                         maps:get({par,N}, Stat)/maps:get({par_n,N},Stat,1),
+                         maps:get({par,N}, Rest)/maps:get({par_n,N},Rest,1))
+                    ])
+      || N <- [3,4,5]]].
+
+stat_line(Type, Stat, Rest) ->
+    stat_line(Type, Type, Stat, Rest).
+
+stat_line(Type, Key, #{count := N} = Stat, false) ->
+    format_line(Type, maps:get(Key, Stat, 0), N);
+stat_line(Type, Key, #{count := N} = Stat, [_,{stat,#{count := Nr} = Rest}|_]) ->
+    Old = maps:get(Key, Rest, 0),
+    format_line(Type, maps:get(Key, Stat, 0), N, Old/Nr*18, compare(Key)).
+
+format_line(Type, Shots, NoHoles) ->
+    io_lib:format("~12s ~17c ~9.2f ~9.2f ~5w~n", [Type, $\s, Shots/NoHoles*18, Shots/NoHoles, Shots]).
+
+format_line(Type, Shots, NoHoles, PerRounds, Compare) ->
+    PerRound = Shots/NoHoles*18,
+    [_| Res] = Compare(PerRound, PerRounds),
+    io_lib:format("~12s ~17c ~9.2f ~9.2f ~5w  ~ts (~.2f)~n",
+                  [Type, $\s, PerRound, Shots/NoHoles, Shots|Res]).
 
 training(Shots) ->
     Rate = fun(Bad, _Good, _Perfect) ->
@@ -414,6 +469,35 @@ training(Shots) ->
     Sorted = [atom_to_list(What) || {_, What} <- lists:reverse(lists:sort(Rated)), What =/= drop],
     io_lib:format("Training order: ~s~n", [lists:join(" ", Sorted)]).
 
+
+compare(gir) -> fun greathan/2;
+compare('par save') -> fun greathan/2;
+compare('up and down') ->  fun greathan/2;
+compare(hio) ->  fun greathan/2;
+compare(albatross) ->  fun greathan/2;
+compare(eagle) ->  fun greathan/2;
+compare(birdie) ->  fun greathan/2;
+compare(par) ->  fun greathan/2;
+compare(bogey) -> fun lessthan/2;
+compare('double bogey') -> fun lessthan/2;
+compare('triple bogey') -> fun lessthan/2;
+compare(other) -> fun lessthan/2;
+compare({putt, 1}) -> fun greathan/2;
+compare({putt, 2}) -> fun greathan/2;
+compare({putt, 3}) -> fun lessthan/2;
+compare({putt, n}) -> fun lessthan/2;
+compare(What) ->
+    io:format("~p: NYI compare ~p~n",[?LINE,What]).
+
+greathan(PA, PB) when PA >= PB ->
+    [PA, [16#2197], PB];
+greathan(PA,PB) ->
+    [PA, [16#2198], PB].
+
+lessthan(PA, PB) when PA =< PB ->
+    [PA, [16#2197], PB];
+lessthan(PA,PB) ->
+    [PA, [16#2198], PB].
 
 sort(KeyList) ->
     {SortOrderList,_} = lists:foldl(fun(Key, {Acc,Id}) -> {[{Key, Id}|Acc],Id+1} end, {[], 1}, [par, stat|keys()]),

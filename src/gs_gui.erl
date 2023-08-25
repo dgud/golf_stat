@@ -53,7 +53,7 @@ gui(File, Courses, Rounds) ->
         loop(#{file => File, frame => Frame, stat => Stat, stat_sel => StatSel, diag => Diags,
                rounds=>Rounds, courses=>Courses, hcp => Hcp})
     catch Err:Reason:ST ->
-            io:format("~p ~P~n ~P~n",[Err,Reason,20,ST,30]),
+            io:format("~p ~P~n ~P~n",[Err,Reason,20,ST,15]),
             error(sorry)
     end,
     ok.
@@ -66,7 +66,7 @@ loop(#{frame := Frame, rounds:=Rounds} = State0) ->
             Name = round_id(Round),
             Choice = maps:get(stat_sel, State0),
 
-            Def = length(default_menus()),
+            Def = length(default_menus(Rounds)),
             wxChoice:insert(Choice, Name, Def), %% After the default stuff
             wxChoice:setSelection(Choice, Def),
             State = State0#{rounds:=NewRounds},
@@ -88,7 +88,7 @@ loop(#{frame := Frame, rounds:=Rounds} = State0) ->
             loop(State0);
         #wx{event=#wxClose{}} ->
             wxWindow:'Destroy'(Frame),
-            io:format("~p: Closing~n", [?MODULE]),
+            %% io:format("~p: Closing~n", [?MODULE]),
             ok;
         Msg ->
             io:format("~p: Msg ~p~n", [?MODULE, Msg]),
@@ -113,7 +113,7 @@ stats_page(NB, Rounds) ->
 
     Fix = fun(ST) ->
                   Font = wxStaticText:getFont(ST),
-                  wxFont:setPointSize(Font,15),
+                  wxFont:setPointSize(Font,14),
                   wxStaticText:setFont(ST, Font),
                   wxStaticText:setBackgroundColour(Background, {250, 250, 250})
           end,
@@ -134,52 +134,64 @@ stats_page(NB, Rounds) ->
 text_stats(Main, Rounds) ->
     Win = wxPanel:new(Main),
     LSz = wxBoxSizer:new(?wxVERTICAL),
-    RoundNames = default_menus() ++ [ round_id(Course) || Course <- Rounds],
+    RoundNames = default_menus(Rounds) ++ [ round_id(Course) || Course <- Rounds],
     Choice = wxChoice:new(Win, ?COURSE, [{size, {400,-1}}, {choices, RoundNames}]),
     wxChoice:connect(Choice,command_choice_selected),
     wxChoice:setSelection(Choice, 0),
     wxSizer:add(LSz, Choice, [{border, 10}, {flag, ?wxALL}]),
-    Font = wxFont:new(12, ?wxMODERN, ?wxNORMAL, ?wxNORMAL),
+    Font = case os:type() of
+               {unix, linux} ->
+                   wxFont:new(12, ?wxDEFAULT, ?wxNORMAL, ?wxNORMAL, [{face, "Noto Sans Mono CJK KR"}]);
+               _ ->
+                   wxFont:new(12, ?wxMODERN, ?wxNORMAL, ?wxNORMAL)
+           end,
+    %% io:format("~p: FontName: ~p~n",[?LINE, wxFont:getNativeFontInfoUserDesc(Font)]),
     Text = wxTextCtrl:new(Win, ?wxID_ANY, [{style, ?wxTE_MULTILINE bor ?wxTE_RICH2 bor ?wxTE_READONLY}]),
     wxWindow:setFont(Text, Font),
     wxSizer:add(LSz, Text, [{proportion,1}, {flag, ?wxEXPAND bor ?wxALL}, {border, 10}]),    
     wxWindow:setSizer(Win, LSz),
     {Win, Text, Choice}.
 
-default_menus() ->
-    ["Total", "2023", "2022", "2021", "Last 5", "Last 10"].
+default_menus(Rounds) ->
+    Found = [Year || #{date := [Year|_]} <- Rounds],
+    {ThisYear,_,_} = date(),
+    Years = lists:reverse(lists:usort([ThisYear|Found])),
+    YearsStrings = [integer_to_list(Year) || Year <- Years],
+    ["Total"] ++ YearsStrings ++ ["Last 5", "Last 10"].
 
 show_stats(Sel, String, All, #{stat:=Stat, diag:=Ds}) ->
     {DiDa,LBs} = split_rounds(All),
     DD = diagram_data(DiDa),
 
-    {Desc, Rs} =
-        case String of
-            "Total" ->
-                {io_lib:format("All rounds (~w)", [length(All)]), All};
-            "2023" = Str ->
-                Y22 = lists:filter(fun(#{date := [Year|_]}) -> Year =:= 2023 end, All),
-                {io_lib:format("Year ~s (~w)", [Str, length(Y22)]), Y22};
-            "2022" = Str ->
-                Y22 = lists:filter(fun(#{date := [Year|_]}) -> Year =:= 2022 end, All),
-                {io_lib:format("Year ~s (~w)", [Str, length(Y22)]), Y22};
-            "2021" = Str ->
-                Y21 = lists:filter(fun(#{date := [Year|_]}) -> Year =:= 2021 end, All),
-                {io_lib:format("Year ~s (~w)", [Str, length(Y21)]), Y21};
-            "Last 5" = Str ->
-                {L5, _} = lists:split(5, All),
-                {Str, L5};
-            "Last 10" = Str ->
-                {L10, _} = lists:split(10, All),
-                {Str, L10};
-            _ ->
-                Def = length(default_menus()),
+    Year = case string:to_integer(String) of
+               {error, _} -> undefined;
+               {Int, _} when is_integer(Int), 1970 < Int -> Int;
+               _ -> undefined
+           end,
+
+    Def = length(default_menus(All)),
+
+    {Desc, Rounds, Other} =
+        case {String, is_integer(Year)} of
+            {"Total", false} ->
+                {io_lib:format("All rounds (~w)", [length(All)]), All, []};
+            {"Last 5", false} ->
+                {L5, Rest} = lists:split(5, All),
+                {String, L5, Rest};
+            {"Last 10", false} ->
+                {L10, Rest} = lists:split(10, All),
+                {String, L10, Rest};
+            {_, false} when Def =< Sel ->
                 %% io:format("~p ~p => ~p~n", [Sel, Def, Sel-Def+1]),
                 Round = lists:nth(Sel-Def+1,All),
-                {"", [Round]}
+                Rest = lists:delete(Round, All),
+                {"", [Round], Rest};
+            {_, true} ->
+                {YearData, Rest} = lists:partition(fun(#{date := [Y|_]}) -> Y =:= Year end, All),
+                {io_lib:format("Year ~s (~w)", [String, length(YearData)]), YearData, Rest}
         end,
     update_diagram(LBs,DD,Ds),
-    wxTextCtrl:setValue(Stat, gs_stats:print_stats(Desc, Rs)).
+    wxTextCtrl:setValue(Stat, gs_stats:print_stats(Desc, Rounds, Other)).
 
 split_rounds(All) ->
     {CurrentYear, _, _} = erlang:date(),
