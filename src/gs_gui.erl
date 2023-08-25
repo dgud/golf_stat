@@ -160,12 +160,9 @@ default_menus(Rounds) ->
     {ThisYear,_,_} = date(),
     Years = lists:reverse(lists:usort([ThisYear|Found])),
     YearsStrings = [integer_to_list(Year) || Year <- Years],
-    ["All Rounds"] ++ YearsStrings ++ ["Last 5", "Last 10"].
+    ["All Rounds"] ++ YearsStrings ++ ["Last 2", "Last 3", "Last 5", "Last 10", "Last 20"].
 
 show_stats(Sel, String, All, #{stat:=Stat, diag:=Ds}) ->
-    {DiDa,LBs} = split_rounds(All),
-    DD = diagram_data(DiDa),
-
     Year = case string:to_integer(String) of
                {error, _} -> undefined;
                {Int, _} when is_integer(Int), 1970 < Int -> Int;
@@ -178,28 +175,40 @@ show_stats(Sel, String, All, #{stat:=Stat, diag:=Ds}) ->
         case {String, is_integer(Year)} of
             {"All Rounds", false} ->
                 {io_lib:format("All rounds (~w)", [length(All)]), All, []};
-            {"Last 5", false} ->
-                {L5, Rest} = lists:split(5, All),
+            {"Last " ++ Num, false} ->
+                {N, _} = string:to_integer(Num),
+                {L5, Rest} = lists:split(N, All),
                 {String, L5, Rest};
-            {"Last 10", false} ->
-                {L10, Rest} = lists:split(10, All),
-                {String, L10, Rest};
             {_, false} when Def =< Sel ->
                 %% io:format("~p ~p => ~p~n", [Sel, Def, Sel-Def+1]),
-                Round = lists:nth(Sel-Def+1,All),
+                #{course:=Course0} = Round = lists:nth(Sel-Def+1,All),
                 Rest = lists:delete(Round, All),
-                {"", [Round], Rest};
+                [Course1|_] = string:split(Course0, "Golf"),
+                [Course|_] = string:split(Course1, "golf"),
+                {string:trim(Course), [Round], Rest};
             {_, true} ->
                 {YearData, Rest} = lists:partition(fun(#{date := [Y|_]}) -> Y =:= Year end, All),
                 {io_lib:format("Year ~s (~w)", [String, length(YearData)]), YearData, Rest}
         end,
+
+    {DiDa,LBs} = split_rounds(Desc, Rounds, Other, Other =/= [] andalso length(Rounds) =/= 1),
+    DD = diagram_data(DiDa),
+
     update_diagram(LBs,DD,Ds),
     wxTextCtrl:setValue(Stat, gs_stats:print_stats(Desc, Rounds, Other)).
 
-split_rounds(All) ->
+split_rounds(_String, Rounds, [], _) ->
+    split_rounds(Rounds, false);
+split_rounds(String, Rounds, Other, KeepYear) ->
+    {Data, Labels} = split_rounds(Other, KeepYear),
+    {Data ++ [Rounds], Labels ++ [String]}.
+
+split_rounds(All, KeepYear) ->
     {CurrentYear, _, _} = erlang:date(),
     CombinedYearData = split_years(CurrentYear, All),
     case CombinedYearData of
+        Old when KeepYear ->
+            lists:unzip(lists:reverse(Old));
         [{This,_},{Prev,_}|Old] when length(This) < 7 ->
             {Data1, Label1} = split_current(This),
             {Data2, Label2} = split(Prev, 5,0, Data1, Label1),
@@ -237,6 +246,8 @@ split_years(Current, Rounds) when Current > 1900 ->
     case Older of
         [] ->
             [Data];
+        _ when YearRs =:= [] ->
+            split_years(Current-1, Older);
         _ ->
             [Data|split_years(Current-1, Older)]
     end.

@@ -46,7 +46,10 @@ do_init(Parent) ->
 handle_sync_event(#wx{event = #wxPaint{}}, _, #{win:=Win}=State) ->
     DC = wxPaintDC:new(Win),
     wxDC:clear(DC),
-    draw(DC, State),
+    try draw(DC, State)
+    catch _E:R:ST ->
+            io:format("~p:~p ~p ~P~n",[?MODULE,?LINE, R, ST, 20])
+    end,
     wxPaintDC:destroy(DC),
     ok.
 
@@ -140,7 +143,7 @@ drawgraphs(X0,XM,Y0,YM, Max, Canvas, [Font0,Font1], {Pens,_}, Labels, Data) ->
 
 
 drawbars(X0,XM,Y0,YM, Max, Canvas, [Font0,Font1], {_, Brushes}, Labels, Data) ->
-    BW0 = ((XM-X0)/(2*length(Labels)-4))/length(Data),
+    BW0 = ((XM-X0)/max(1,(2*length(Labels))))/max(length(Data),1),
     BW = max(6, min(10, BW0)),
     DrawBox = fun(V, {N, X}) ->
                       Y = ((Max-V)/Max)*(YM-Y0)+Y0,

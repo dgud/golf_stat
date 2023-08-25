@@ -256,8 +256,9 @@ sum(#{bad:=Bad,good:=Good,perfect:=Perfect}) ->
 
 diagram_data(Rounds) ->
     %% NoRounds = max(length(Rounds), 1),
-    [{par, _Par},{stat, #{count := NoHoles} = Stat}|ShotStats] = collect(Rounds),
-    NoRounds = max(1, NoHoles/18),  %% avoid division by zero
+    [{par, _Par},{stat, #{count := NoHoles0} = Stat}|ShotStats] = collect(Rounds),
+    NoHoles = max(1, NoHoles0), %% avoid division by zero
+    NoRounds = max(1, NoHoles0/18),
 
     F = fun(P) ->
                 case P of
@@ -304,7 +305,8 @@ diagram_data(Rounds) ->
                       bogey, 'double bogey', 'triple bogey', other
                      ]],
     D4 = [{F(Type), maps:get(Type, Stat, 0) / Div} ||
-             {Type, Div} <- [{gir, NoRounds}, {putts, NoHoles}, {'up and down', NoRounds} , {'par save', NoRounds}]],
+             {Type, Div} <- [{gir, NoRounds}, {'up and down', NoRounds},
+                             {putts, NoHoles}, {'par save', NoRounds}]],
 
     Scores = [{io_lib:format("Par ~w", [N]), maps:get({par,N}, Stat, 0)/maps:get({par_n,N},Stat,1)}
               || N <- [3,4,5]],
