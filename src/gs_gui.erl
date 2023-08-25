@@ -109,7 +109,10 @@ stats_page(NB, Rounds) ->
                 _ <- lists:seq(1,7)],
 
     Texts = [wxStaticText:new(Background, ?wxID_ANY, Str) ||
-                Str <- ["Long game", "Short game", "Putting", "Number of putts", "Saves and Drops", "Hole Stats", "Shots"]],
+                Str <- ["Statistics", "Scores",
+                        "Long game", "Short game",
+                        "Putting", "Number of putts",
+                        "Hole Stats"]],
 
     Fix = fun(ST) ->
                   Font = wxStaticText:getFont(ST),
@@ -128,7 +131,7 @@ stats_page(NB, Rounds) ->
     wxSizer:add(MainSz, TextWin, [{proportion, 1}, {flag, ?wxEXPAND}]),
     wxSizer:add(MainSz, Background, [{proportion, 1}, {flag, ?wxEXPAND}]),
     wxWindow:setSizer(Main, MainSz),
-    show_stats(undefined, "Total", Rounds, #{stat=>Text, diag=>Diags}),
+    show_stats(undefined, "All Rounds", Rounds, #{stat=>Text, diag=>Diags}),
     {Main, Text, Choice, Diags}.
 
 text_stats(Main, Rounds) ->
@@ -157,7 +160,7 @@ default_menus(Rounds) ->
     {ThisYear,_,_} = date(),
     Years = lists:reverse(lists:usort([ThisYear|Found])),
     YearsStrings = [integer_to_list(Year) || Year <- Years],
-    ["Total"] ++ YearsStrings ++ ["Last 5", "Last 10"].
+    ["All Rounds"] ++ YearsStrings ++ ["Last 5", "Last 10"].
 
 show_stats(Sel, String, All, #{stat:=Stat, diag:=Ds}) ->
     {DiDa,LBs} = split_rounds(All),
@@ -173,7 +176,7 @@ show_stats(Sel, String, All, #{stat:=Stat, diag:=Ds}) ->
 
     {Desc, Rounds, Other} =
         case {String, is_integer(Year)} of
-            {"Total", false} ->
+            {"All Rounds", false} ->
                 {io_lib:format("All rounds (~w)", [length(All)]), All, []};
             {"Last 5", false} ->
                 {L5, Rest} = lists:split(5, All),
