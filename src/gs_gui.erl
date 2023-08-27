@@ -306,11 +306,14 @@ set_icon(Frame) ->
 hcp_page(NB) ->
     Win = wxPanel:new(NB),
     Sz = wxBoxSizer:new(?wxVERTICAL),
-    Result = wxTextCtrl:new(Win, ?wxID_ANY, [{style, ?wxTE_MULTILINE bor ?wxTE_RICH2 bor ?wxTE_READONLY}]),
+    Desc = "Copy your (top 20) rounds from mingolf.se below \"Min Handicap\" to the green area at the bottom",
+    Result = wxTextCtrl:new(Win, ?wxID_ANY,
+                            [{style, ?wxTE_MULTILINE bor ?wxTE_RICH2 bor ?wxTE_READONLY},
+                             {value, Desc}
+                            ]),
     wxSizer:add(Sz, Result, [{proportion,1}, {flag, ?wxEXPAND bor ?wxALL}, {border, 10}]),
-    Desc = "Copy your rounds from mingolf.se from \"Min Handicap\" button to text area below",
-    wxSizer:add(Sz, wxStaticText:new(Win,?wxID_ANY, Desc)),
     Input = wxTextCtrl:new(Win, ?wxID_ANY, [{style, ?wxTE_MULTILINE bor ?wxTE_RICH2}]),
+    wxWindow:setBackgroundColour(Input, {144,238,144}),
     wxTextCtrl:connect(Input, command_text_updated),
     wxSizer:add(Sz, Input, [{proportion,1}, {flag, ?wxEXPAND bor ?wxALL}, {border, 10}]),
     wxWindow:setSizerAndFit(Win, Sz),

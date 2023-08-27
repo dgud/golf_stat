@@ -17,10 +17,20 @@ start(Notebook, Parent, Courses) ->
     wx_object:start_link(?MODULE, [Notebook, Parent, Courses], []).
 
 
+input_desc() ->
+    "Input shots in order from tee to hole.\n\n"
+        "Categorizing shots is personal but I use the following: \n"
+        " - Bad: Shots that causes a drop or a bogey on the hole\n"
+        " - Good: Normal shots\n"
+        " - Perfect: Shots that saves a result or are just great\n".
+
 init([NoteBook, Parent, Courses]) ->
     Win = wxPanel:new(NoteBook),
     Sz = wxBoxSizer:new(?wxVERTICAL),
     wxSizer:addSpacer(Sz, 5),
+
+    InfoCtrl = wxStaticText:new(Win, ?wxID_ANY, input_desc()),
+    wxSizer:add(Sz, InfoCtrl, [{border, 20}, {flag, ?wxALL}]),
 
     CourseNames = ["Add New Course"|[Name || #{name:=Name} <- Courses]],
     CourseChoice = wxChoice:new(Win, ?COURSE, [{size, {400,-1}}, {choices, CourseNames}]),
