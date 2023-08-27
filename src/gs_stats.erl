@@ -154,16 +154,16 @@ key(ShotId) ->
     lists:nth(ShotId, keys()).
 
 keys() ->
-    [drive, woods, iron, wedge, pitch, bunker, chip, drop, 'long putt', 'medium putt', 'short putt'].
+    [drive, woods, iron, wedge, pitch, chip, bunker, drop, 'long putt', 'medium putt', 'short putt'].
 
 shots() ->
-    [{"Drive",  "Max length shots"},
-     {"Woods",  "180-230m Long shots"},
-     {"Iron",   "120-180m Iron shots"},
-     {"Wedge",  "60-120m Wedge shots"},
+    [{"Drive",  "Driver shots"},
+     {"Woods",  "All other wood shots (180-220m)"},
+     {"Iron",   "Iron shots (110-180m)"},
+     {"Wedge",  "Full Wedge shots (80-110m)"},
      {"Pitch",  "20-60m Pitches"},
-     {"Bunkers","Bunker shots close green"},
      {"Chips",  "Chipping"},
+     {"Bunkers","Bunker shots close green"},
      {"Drop", "Penaltys"},
      {"Long putts", "Longer than 3m putts"},
      {"Medium putts", "1-3m putts"},
@@ -370,7 +370,7 @@ shot_stats(Shots, #{count := NoHoles}, RestRounds) ->
                             false ->
                                 {false, ""}
            end,
-    [io_lib:format("~12s:  bad   ok   good  per round  per hole total ~s~n", ["shoot type", TrendDesc]) |
+    [io_lib:format("~12s:  bad   ok   good  per round  ~s~n", ["shoot type", TrendDesc]) |
      [shot_stat(Shot, NoHoles, Rest) || Shot <- Shots]].
 
 shot_stat({drop, _}, _NoHoles, _Rest) ->
@@ -379,16 +379,16 @@ shot_stat({Key, #{bad:=Bad,good:=Good,perfect:=Perfect}}, NoHoles, Rest) ->
     case {Bad+Good+Perfect, Rest} of
         {0,_} -> io_lib:format("~12s~n", [Key]);
         {Total, false} ->
-            io_lib:format("~12s ~4w% ~4w% ~4w% ~9.2f ~9.2f ~5w~n",
+            io_lib:format("~12s ~4w% ~4w% ~4w% ~9.2f~n",
                           [Key, round(Bad/Total*100), round(Good/Total*100), round(Perfect/Total*100),
-                           Total/NoHoles*18, Total/NoHoles, Total]);
+                           Total/NoHoles*18]);
         {Total, {_N,List}} when is_list(List) ->
             {_, #{bad:=RBad,good:=RG,perfect:=RP}} = lists:keyfind(Key, 1, List),
             RTotal = RBad+ RG + RP,
             [_, Trend, _] = greathan((Good+Perfect)/Total, (RG+RP)/RTotal),
-            io_lib:format("~12s ~4w% ~4w% ~4w% ~9.2f ~9.2f ~5w  ~ts~n",
+            io_lib:format("~12s ~4w% ~4w% ~4w% ~9.2f   ~ts~n",
                           [Key, round(Bad/Total*100), round(Good/Total*100), round(Perfect/Total*100),
-                           Total/NoHoles*18, Total/NoHoles, Total, Trend])
+                           Total/NoHoles*18, Trend])
     end.
 
 
@@ -401,16 +401,16 @@ putt_stats(#{count := NoHoles} = Stat, Rest) ->
     PuttHs = Bad+Good+Perfect,
     Putts = case Rest of
                 false ->
-                    io_lib:format("~12s ~4w% ~4w% ~4w% ~9.2f ~9.2f ~5w~n~n",
+                    io_lib:format("~12s ~4w% ~4w% ~4w% ~9.2f~n~n",
                                   ['putts', round(Bad/PuttHs*100), round(Good/PuttHs*100),
-                                   round(Perfect/PuttHs*100), Total/NoHoles*18, Total/NoHoles, Total]);
+                                   round(Perfect/PuttHs*100), Total/NoHoles*18]);
                 [_,{stat,RStat}|_] ->
                     RTotal = maps:get(putts, RStat, 0),
                     RN = maps:get(count, RStat),
                     [PPR|Trend] = lessthan(Total/NoHoles*18,RTotal/RN*18),
-                    io_lib:format("~12s ~4w% ~4w% ~4w% ~9.2f ~9.2f ~5w  ~ts (~.2f)~n~n",
+                    io_lib:format("~12s ~4w% ~4w% ~4w% ~9.2f   ~ts (~.2f)~n~n",
                                   ['putts', round(Bad/PuttHs*100), round(Good/PuttHs*100),
-                                   round(Perfect/PuttHs*100), PPR, Total/NoHoles, Total|Trend])
+                                   round(Perfect/PuttHs*100), PPR|Trend])
             end,
     [Putts| [stat_line(Type, {putt,N}, Stat, Rest) ||
                 {Type, N} <- [{'one putt', 1}, {'two putt', 2}, {'three putt',3}, {'putt > 3', n}]]
@@ -431,7 +431,7 @@ play_stats(#{count:=NoHoles} = Stat, Shots, Rest) ->
                   {format_line(drop, Drop, NoHoles, RBad/RN*18, fun lessthan/2),
                    "Trend"}
           end,
-    [io_lib:format("~12s:                   per round  per hole total ~s~n", ["Statistics", TrendDesc]),
+    [io_lib:format("~12s:                   per round  ~s~n", ["Statistics", TrendDesc]),
      [stat_line(Type, Stat, Rest) || Type <- [gir, 'up and down', putts, 'par save']],
      DropString
     ].
@@ -459,13 +459,12 @@ stat_line(Type, Key, #{count := N} = Stat, [_,{stat,#{count := Nr} = Rest}|_]) -
     format_line(Type, maps:get(Key, Stat, 0), N, Old/Nr*18, compare(Key)).
 
 format_line(Type, Shots, NoHoles) ->
-    io_lib:format("~12s ~17c ~9.2f ~9.2f ~5w~n", [Type, $\s, Shots/NoHoles*18, Shots/NoHoles, Shots]).
+    io_lib:format("~12s ~17c ~9.2f~n", [Type, $\s, Shots/NoHoles*18]).
 
 format_line(Type, Shots, NoHoles, PerRounds, Compare) ->
     PerRound = Shots/NoHoles*18,
     [_| Res] = Compare(PerRound, PerRounds),
-    io_lib:format("~12s ~17c ~9.2f ~9.2f ~5w  ~ts (~.2f)~n",
-                  [Type, $\s, PerRound, Shots/NoHoles, Shots|Res]).
+    io_lib:format("~12s ~17c ~9.2f   ~ts (~.2f)~n", [Type, $\s, PerRound|Res]).
 
 training(Shots) ->
     Rate = fun(Bad, _Good, _Perfect) ->
