@@ -1,46 +1,34 @@
 -module(gs_stats).
 
--export([empty/0, no_shots/1, set_hole_data/3,
+-export([empty/0, set_hole_data/3,
          add_hole/3, get_hole/2, set_round_data/3,
          keys/0, key/1, shots/0,
-         read/1, save/2,
+         read_player/1, save_player/2,
          read_courses/1, save_courses/2,
-         print_stats/3, print_holes/1,
+         print_stats/3,
          diagram_data/1
         ]).
 
-read(File) ->
-    case filename:extension(File) of
-        ".txt" -> read_erlang(File);
-        _ -> read_json(File)
-    end.
-
-read_erlang(File) ->
-    case file:consult(File) of
-        {ok, Data} ->
-            %% io:format("Prev: ~P~n",[Data, 10]),
-            try
-                JsonData = to_json(Data),
-                FileWOExt = filename:rootname(File),
-                FileJson = FileWOExt ++ ".json",
-                io:format("Convert to file: ~s~n",[FileJson]),
-                ok = file:write_file(FileJson, JsonData)
-            catch _:Reason:ST ->
-                    io:format("error: ~p~n ~W~n", [Reason, ST, 20])
-            end,
-            Data;
-        {error, enoent} ->
-            io:format("Starting new data, File not found: ~s~n",[File]),
-            []
-    end.
+read_player(File) ->
+    read_json(File).
 
 read_json(File) ->
     case file:read_file(File) of
         {ok, Bin} ->
             Rounds = jsone:decode(Bin, [{keys, atom}]),
-            ConvRound = fun(Map) ->
-                                All = [{convert_key_from_json(Key), convert_val_from_json(Val)} || {Key,Val} <- maps:to_list(Map)],
-                                maps:from_list(All)
+            ConvRound = fun(Round) ->
+                                All = convert_map_from_json(Round),
+                                case All of
+                                    #{holes := _} -> %% New format
+                                        All;
+                                    _ -> %% Old format
+                                        try convert_old(maps:to_list(All))
+                                        catch _:Reason:ST ->
+                                                io:format("~p: Failed: ~p ~p~n",[?LINE, Reason,ST]),
+                                                io:format(" ~p ~p~n",[maps:get(date, Round), maps:get(course, Round)]),
+                                                exit(fail)
+                                        end
+                                end
                         end,
             [ConvRound(R) || R <- Rounds];
         {error, _} ->
@@ -57,7 +45,11 @@ show_error(String) when is_list(String) ->
     wxMessageDialog:showModal(MD),
     wxMessageDialog:destroy(MD).
 
-convert_key_from_json(Key) ->
+convert_map_from_json(Map) when is_map(Map) ->
+    All = [{convert_key_from_json(Key), convert_val_from_json(Key, Val)} || {Key,Val} <- maps:to_list(Map)],
+    maps:from_list(All).
+
+convert_key_from_json(Key) ->  %% Old format
     case string:to_integer(atom_to_binary(Key)) of
         {Int, <<>>} when is_integer(Int) ->
             Int;
@@ -65,17 +57,21 @@ convert_key_from_json(Key) ->
             Key
     end.
 
-convert_val_from_json(Val) when is_map(Val) ->
+convert_val_from_json(_, Val) when is_map(Val) ->
+    convert_map_from_json(Val);
+convert_val_from_json(_, Val) when is_integer(Val) ->
     Val;
-convert_val_from_json(Val) when is_integer(Val) ->
-    Val;
-convert_val_from_json(Val) when is_binary(Val) ->
+convert_val_from_json(club, Val) when is_binary(Val) ->
+    binary_to_atom(Val);
+convert_val_from_json(_, Val) when is_binary(Val) ->
     String = unicode:characters_to_list(Val),
     try convert_to_date(String) of
         Date -> Date
     catch _:_ ->
             String
-    end.
+    end;
+convert_val_from_json(_, List) when is_list(List) ->
+    [convert_val_from_json(undefined, E) || E <- List].
 
 convert_to_date(Str0) ->
     {Year, [$-|Str1]} = string:to_integer(Str0),
@@ -85,28 +81,32 @@ convert_to_date(Str0) ->
 
 
 to_json(Data) ->
-    ConvRound = fun(Map) ->
-                        All = [{convert_key_to_json(Key), convert_val_to_json(Val)} || {Key,Val} <- maps:to_list(Map)],
-                        maps:from_list(All)
-                end,
-    PreJson = [ConvRound(R) || R <- Data],
+    PreJson = [conv_map_to_json(R) || R <- Data],
     jsone:encode(PreJson, [native_utf8, {space, 0}, {indent, 1}]).
 
-convert_key_to_json(Int) when is_integer(Int) ->
+conv_map_to_json(Map) ->
+    All = [{convert_key_to_json(Key), convert_val_to_json(Val)} || {Key,Val} <- maps:to_list(Map)],
+    maps:from_list(All).
+
+convert_key_to_json(Int) when is_integer(Int) ->  %% Old format
     integer_to_binary(Int);
-convert_key_to_json(Key) ->
+convert_key_to_json(Key) when is_atom(Key) ->
     Key.
 
 convert_val_to_json([Y,M,D]) when is_integer(Y), Y > 2000 ->
     {{Y,M,D},{10,0,0}};
-convert_val_to_json(String) when is_list(String) ->
+convert_val_to_json(String) when is_list(String), is_integer(hd(String)) ->
     unicode:characters_to_binary(String);
+convert_val_to_json(List) when is_list(List) ->
+    [convert_val_to_json(E) || E <- List];
 convert_val_to_json(Int) when is_integer(Int) ->
     Int;
 convert_val_to_json(Map) when is_map(Map) ->
-    Map.
+    conv_map_to_json(Map);
+convert_val_to_json(Atom) when is_atom(Atom) ->
+    atom_to_binary(Atom).
 
-save(File, Data) ->
+save_player(File, Data) ->
     _ = file:rename(File, File ++ ".old"),
     Json = to_json(Data),
     file:write_file(File, Json).
@@ -135,15 +135,22 @@ empty() ->
 set_hole_data(Key, Data, Hole) ->
     Hole#{Key => Data}.
 
-no_shots(Hole) ->
-    lists:sum(lists:flatten([maps:values(M) || M <- maps:values(Hole), is_map(M)])).
-
 %% Round
 add_hole(HoleNo, Hole, Round) ->
-    Round#{HoleNo => Hole}.
+    Holes0  = maps:get(holes, Round, []),
+    Holes1 = case lists:search(fun(#{no := No}) -> No == HoleNo end, Holes0) of
+                 false -> Holes0;
+                 {value, OldHole} -> lists:delete(OldHole, Holes0)
+             end,
+    Holes = lists:sort(fun(#{no := No1}, #{no := No2}) -> No1 =< No2 end,
+                       [Hole|Holes1]),
+    Round#{holes => Holes}.
 
-get_hole(Hole,Round) ->
-    maps:get(Hole, Round, gs_stats:empty()).
+get_hole(HoleNo, #{holes := Holes}) ->
+    case lists:search(fun(#{no := No}) -> No == HoleNo end, Holes) of
+        false -> #{no => HoleNo, shots => []};
+        {value, Hole} -> Hole
+    end.
 
 set_round_data(Key, Data, Round) ->
     Round#{Key=>Data}.
@@ -154,7 +161,7 @@ key(ShotId) ->
     lists:nth(ShotId, keys()).
 
 keys() ->
-    [drive, woods, iron, wedge, pitch, chip, bunker, drop, 'long putt', 'medium putt', 'short putt'].
+    [drive, woods, iron, wedge, pitch, bunker, chip, drop, 'long putt', 'medium putt', 'short putt'].
 
 shots() ->
     [{"Drive",  "Driver shots"},
@@ -162,8 +169,8 @@ shots() ->
      {"Iron",   "Iron shots (110-180m)"},
      {"Wedge",  "Full Wedge shots (80-110m)"},
      {"Pitch",  "20-60m Pitches"},
-     {"Chips",  "Chipping"},
      {"Bunkers","Bunker shots close green"},
+     {"Chips",  "Chipping"},
      {"Drop", "Penaltys"},
      {"Long putts", "Longer than 3m putts"},
      {"Medium putts", "1-3m putts"},
@@ -172,18 +179,14 @@ shots() ->
 
 %%% Stats
 
-merge_round(Round0) ->
-    lists:foldl(fun({No,Hole}, Acc) ->
-                        case is_integer(No) of
-                            true ->
-                                case analyze_hole(Hole) of
-                                    ignore -> Acc;
-                                    HoleData -> merge(HoleData, Acc)
-                                end;
-                            false -> Acc
+merge_round(#{holes:=Holes}) ->
+    lists:foldl(fun(Hole, Acc) ->
+                        case analyze_hole(Hole) of
+                            ignore -> Acc;
+                            HoleData -> merge(HoleData, Acc)
                         end
                 end,
-                empty(), maps:to_list(Round0)).
+                empty(), Holes).
 
 merge(Prev, Round0) ->
     Add = fun(_, V1, V2) -> V1+V2 end,
@@ -192,8 +195,9 @@ merge(Prev, Round0) ->
               end,
     maps:merge_with(DoShots, Prev, Round0).
 
-analyze_hole(Hole) ->
-    {Par, Shots, Putts} = hole_to_shots(Hole),
+analyze_hole(#{par:=Par, shots:=AllShots}) ->
+    {Shots, Putts} = count_shots(AllShots),
+    Hole = lists:foldl(fun expand_shots/2, empty(), AllShots),
     case Shots of
         0 -> ignore;
         _ ->
@@ -216,7 +220,7 @@ analyze_hole(Hole) ->
             ParSave = bool_to_int(Putts =< 1 andalso Total == Par),
             #{chip := Chip, bunker := Bunker, pitch := Pitch} = Hole,
             Short = sum(Chip)+sum(Bunker)+sum(Pitch),
-            UpAndDown = bool_to_int(Total =< Par andalso Short > 0 andalso Putts =< 1),
+            UpAndDown = bool_to_int(Short > 0 andalso Putts =< 1),
             {P1,P2} = other_par(Par),
 
             Stat = #{count => 1, {par,Par} => Total, {par_n,Par} => 1,
@@ -226,33 +230,35 @@ analyze_hole(Hole) ->
                      hio => Hio, albatross => Albatross, eagle => Eagle, birdie => Birde, par => MadePar,
                      bogey => Bogey, 'double bogey' => DBogey, 'triple bogey' => TBogey, other => Other
                     },
-            Hole#{stat => Stat}
+            Hole#{par=> Par, stat => Stat}
     end.
 
 other_par(3) -> {4,5};
 other_par(4) -> {3,5};
 other_par(5) -> {3,4}.
 
-
 bool_to_int(false) -> 0;
 bool_to_int(true) -> 1.
 
-hole_to_shots(Hole) ->
-    maps:fold(fun sum_shot/3, {undef,0,0}, Hole).
+count_shots(Shots) ->
+    lists:foldl(fun sum_shot/2, {0,0}, Shots).
 
-sum_shot('long putt', Data, {Par,Shots,Putts}) ->
-    {Par, Shots, sum(Data)+Putts};
-sum_shot('medium putt', Data, {Par, Shots,Putts}) ->
-    {Par, Shots, sum(Data)+Putts};
-sum_shot('short putt', Data, {Par, Shots,Putts}) ->
-    {Par, Shots, sum(Data)+Putts};
-sum_shot(par, Par, {_Par, Shots,Putts}) ->
-    {Par, Shots, Putts};
-sum_shot(_, Data, {Par, Shots,Putts}) ->
-    {Par, sum(Data)+Shots, Putts}.
+sum_shot(#{club:='long putt'} = Shot, {Shots,Putts}) ->
+    {Shots, sum(Shot)+Putts};
+sum_shot(#{club:='medium putt'} = Shot, {Shots,Putts}) ->
+    {Shots, sum(Shot)+Putts};
+sum_shot(#{club:='short putt'} = Shot, {Shots,Putts}) ->
+    {Shots, sum(Shot)+Putts};
+sum_shot(#{club:=_} = Shot, {Shots,Putts}) ->
+    {sum(Shot)+Shots, Putts}.
 
-sum(#{bad:=Bad,good:=Good,perfect:=Perfect}) ->
-    Bad+Good+Perfect.
+sum(Shot) ->
+    maps:get(bad, Shot, 0) + maps:get(good, Shot, 0) + maps:get(perfect, Shot, 0).
+
+expand_shots(#{club:=Club} = Shot, Acc) ->
+    #{Club := Count} = Acc,
+    Acc#{Club := merge(maps:remove(club, Shot), Count)}.
+
 
 diagram_data(Rounds) ->
     %% NoRounds = max(length(Rounds), 1),
@@ -385,7 +391,7 @@ shot_stat({Key, #{bad:=Bad,good:=Good,perfect:=Perfect}}, NoHoles, Rest) ->
         {Total, {_N,List}} when is_list(List) ->
             {_, #{bad:=RBad,good:=RG,perfect:=RP}} = lists:keyfind(Key, 1, List),
             RTotal = RBad+ RG + RP,
-            [_, Trend, _] = greathan((Good+Perfect)/Total, (RG+RP)/RTotal),
+            [_, Trend, _] = greathan((Good+Perfect)/Total, percent(RG+RP, RTotal)),
             io_lib:format("~12s ~4w% ~4w% ~4w% ~9.2f   ~ts~n",
                           [Key, round(Bad/Total*100), round(Good/Total*100), round(Perfect/Total*100),
                            Total/NoHoles*18, Trend])
@@ -507,6 +513,12 @@ lessthan(PA, PB) when PA =< PB ->
 lessthan(PA,PB) ->
     [PA, [16#2198], PB].
 
+percent(_Score, Zero) when Zero == 0 ->
+    1.0;
+percent(Score, Total) ->
+    Score/Total.
+
+
 sort(KeyList) ->
     {SortOrderList,_} = lists:foldl(fun(Key, {Acc,Id}) -> {[{Key, Id}|Acc],Id+1} end, {[], 1}, [par, stat|keys()]),
     SortOrder = maps:from_list(SortOrderList),
@@ -514,10 +526,54 @@ sort(KeyList) ->
     [KeyData || {_, KeyData} <- Sorted].
 
 
-print_holes(Stat) ->
-    List = lists:sort(maps:to_list(Stat)),
-    [print_hole(No, H) || {No, H} <- List, is_integer(No)].
+convert_old(OldData) ->
+    Round = convert_old(lists:keysort(1, OldData), [], []),
+    %% io:format("~p: ~p~n",[?LINE, Round]),
+    Round.
 
-print_hole(No, #{drop:=#{bad:=Drop}} = Hole) ->
-    {Par, Shots, Putts} = hole_to_shots(Hole),
-    io:format("~.2w ~w ~.2w ~w ~w~n",[No, Par, Shots-Drop, Drop, Putts]).
+convert_old([{HoleNo,Shots}|R], Keep, Holes) when is_integer(HoleNo) ->
+    Hole0 = convert_hole(Shots),
+    Hole = Hole0#{no => HoleNo},
+    convert_old(R, Keep, [Hole|Holes]);
+convert_old([Data|R], Keep, Holes) ->
+    convert_old(R, [Data|Keep], Holes);
+convert_old([], Keep, Holes) ->
+    maps:from_list([{holes, lists:reverse(Holes)}|Keep]).
+
+convert_hole(#{par := Par, drop := #{bad := Drop}} = Map) ->
+    Shots = convert_shots(sort(maps:to_list(Map)), Drop, 1, []),
+    #{par => Par, shots => Shots}.
+
+convert_shots([{drop, _}|R], Drop, N, Shots) ->
+    convert_shots(R, Drop, N, Shots);
+convert_shots([{_Club, #{bad:=0, good:=0, perfect:=0}}|R], Drop, N, Shots) ->
+    convert_shots(R, Drop, N, Shots);
+convert_shots([{Club, #{bad:=Bad}=Map}|R], Drop, N, Shots) when Bad > 0, Drop > 0 ->
+    Shot1 = #{club => Club, bad => 1},
+    Shot2 = #{club => drop, bad => 1},
+    convert_shots([{Club, Map#{bad:=Bad-1}}|R], Drop-1, N+2, [Shot2,Shot1|Shots]);
+convert_shots([{Club, #{bad:=Res}=Map}|R], Drop, N, Shots) when Res > 0 ->
+    Shot1 = #{club => Club, bad => 1},
+    convert_shots([{Club, Map#{bad:=Res-1}}|R], Drop, N+1, [Shot1|Shots]);
+convert_shots([{Club, #{good:=Res}=Map}|R], Drop, N, Shots) when Res > 0 ->
+    Shot1 = #{club => Club, good => 1},
+    convert_shots([{Club, Map#{good:=Res-1}}|R], Drop, N+1, [Shot1|Shots]);
+convert_shots([{Club, #{perfect:=Res}=Map}|R], Drop, N, Shots) when Res > 0 ->
+    Shot1 = #{club => Club, perfect => 1},
+    convert_shots([{Club, Map#{perfect:=Res-1}}|R], Drop, N+1, [Shot1|Shots]);
+convert_shots([], 0, _, Shots) ->
+    lists:reverse(Shots);
+convert_shots([{par, _}|R], Drop, N, Shots) ->
+    convert_shots(R, Drop, N, Shots);
+convert_shots([], Drop, _N, Shots) when Drop > 0 ->
+    %% Hmm when I have picked up the ball I have added random drop shots, sigh.
+    PuttKeys = ['short putt', 'medium putt', 'long putt', drop],
+    {Putts, Other} = lists:partition(fun(#{club := Club}) -> lists:member(Club, PuttKeys) end, Shots),
+    lists:reverse(Putts  ++ [#{club => drop, bad => 1} || _ <- lists:seq(1,Drop)] ++ Other);
+convert_shots(What, Drop, N, Shots) ->
+    io:format("~p:~p: ~p ~p ~p ~n",[?MODULE,?LINE, N, Drop, What]),
+    io:format(" ~p ~n", [Shots]),
+    exit({nyi, What}).
+
+
+

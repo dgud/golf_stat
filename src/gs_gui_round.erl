@@ -9,9 +9,10 @@
 -define(NEXT, 1).
 -define(PREVIOUS, 2).
 -define(RESET, 3).
--define(DONE, 4).
+-define(RESET_SHOT, 4).
 -define(COURSE, 5).
 -define(DATE, 6).
+-define(DONE, 7).
 
 start(Notebook, Parent, Courses) ->
     wx_object:start_link(?MODULE, [Notebook, Parent, Courses], []).
@@ -21,8 +22,8 @@ input_desc() ->
     "Input shots in order from tee to hole.\n\n"
         "Categorizing shots is personal but I use the following: \n"
         " - Bad: Shots that causes a drop or a bogey on the hole\n"
-        " - Good: Normal shots\n"
-        " - Perfect: Shots that saves a result or are just great\n".
+        " - Good: Normal good shots\n"
+        " - Great: Shots that saves a result or are just perfect\n".
 
 init([NoteBook, Parent, Courses]) ->
     Win = wxPanel:new(NoteBook),
@@ -49,21 +50,24 @@ init([NoteBook, Parent, Courses]) ->
     wxSizer:add(Sz, Stat, [{border, 50}, {flag, ?wxLEFT}]),
     lists:foldl(fun(Strs, Acc) -> add_row(Strs, Win, Sz, Acc), Acc+10 end, 10, gs_stats:shots()),
     cont_buttons(Win, Sz),
+    ShotOrder = wxStaticText:new(Win, ?wxID_ANY, "Hit shots", [{size, {100, -1}}]),
+    wxStaticText:setFont(ShotOrder, gs_gui:make_mono_font(13)),
+    wxSizer:add(Sz, ShotOrder, [{border, 50}, {flag, ?wxLEFT}]),
 
     wxWindow:connect(Win, command_button_clicked),
     wxWindow:setSizerAndFit(Win, Sz),
-    {Win, #{stat => Stat, parent => Parent, courses => Courses, frame => NoteBook,
+    {Win, #{stat => Stat, parent => Parent, courses => Courses, frame => NoteBook, shot_order => ShotOrder,
             course => undefined, date => tuple_to_list(date()),
-            pars => [], hole_cnt => 1, hole => gs_stats:empty(),
-            round => #{}, total => 0}}.
+            pars => [], hole_cnt => 1,
+            round => #{}, total => 0, shots => []}}.
 
-handle_event(#wx{id=?DONE, event=#wxCommand{type=command_button_clicked}}, #{stat:=Stat} = State0) ->
+handle_event(#wx{id=?DONE, event=#wxCommand{type=command_button_clicked}}, State0) ->
     State = handle_click(?DONE, State0),
-    wxStaticText:setLabel(Stat, current(State)),
+    write_info(State),
     {noreply, State};
 
 handle_event(#wx{id=Id, event=#wxCommand{type=command_button_clicked}},
-             #{stat:=Stat, course:=CName, frame:=Frame} = State0) ->
+             #{course:=CName, frame:=Frame} = State0) ->
     case CName =:= undefined of
         true ->
             MB = wxMessageDialog:new(Frame, "Select course first"),
@@ -72,7 +76,7 @@ handle_event(#wx{id=Id, event=#wxCommand{type=command_button_clicked}},
         _ ->
             State = handle_click(Id, State0),
             update_shots(State),
-            wxStaticText:setLabel(Stat, current(State)),
+            write_info(State),
             {noreply, State}
     end;
 
@@ -80,11 +84,10 @@ handle_event(#wx{obj=CC, event=#wxCommand{type=command_choice_selected, commandI
     State = handle_add_new_course(CC, State0),
     {noreply, State};
 
-handle_event(#wx{event=#wxCommand{type=command_choice_selected, commandInt=Sel}},
-             #{stat:=Stat} = State0) ->
+handle_event(#wx{event=#wxCommand{type=command_choice_selected, commandInt=Sel}}, State0) ->
     #{name:=Name, pars:=Pars} = lists:nth(Sel, maps:get(courses, State0)),
     State = State0#{course:=Name, pars:=Pars},
-    wxStaticText:setLabel(Stat, current(State)),
+    write_info(State),
     {noreply, State};
 
 handle_event(#wx{id=?DATE, event=#wxDate{date={Date,_Time}}}, State) ->
@@ -107,9 +110,14 @@ handle_info(Msg, State0) ->
     {noreply, State0}.
 
 
-add_hole(#{hole_cnt:=HoleNo, hole:=Hole, round:=Round, pars:=Pars} = State) ->
+add_hole(#{shots:=[]} = State) ->
+    State;
+add_hole(#{hole_cnt:=HoleNo, round:=Round, pars:=Pars, shots:=Shots} = State) ->
     Par = lists:nth(HoleNo, Pars),
-    State#{round:=gs_stats:add_hole(HoleNo, gs_stats:set_hole_data(par, Par, Hole), Round)}.
+    Hole0 = gs_stats:set_hole_data(no, HoleNo, #{}),
+    Hole1 = gs_stats:set_hole_data(par, Par, Hole0),
+    Hole  = gs_stats:set_hole_data(shots, lists:reverse(Shots), Hole1),
+    State#{round:=gs_stats:add_hole(HoleNo, Hole, Round)}.
 
 handle_click(?NEXT, #{hole_cnt:=HoleNo, pars:=Pars} = State0) ->
     Next = HoleNo+1,
@@ -117,22 +125,22 @@ handle_click(?NEXT, #{hole_cnt:=HoleNo, pars:=Pars} = State0) ->
         true -> State0;
         false ->
             #{round:=Round} = State = add_hole(State0),
-            Hole = gs_stats:get_hole(Next, Round),
-            State#{hole_cnt := Next, hole:=Hole}
+            #{no := Next, shots := Shots} = gs_stats:get_hole(Next, Round),
+            State#{hole_cnt := Next, shots := lists:reverse(Shots)}
     end;
 handle_click(?PREVIOUS, #{hole_cnt:=HoleNo, round:=Round} = State0) ->
     case HoleNo > 1 of
         true ->
             State = add_hole(State0),
             Prev = HoleNo-1,
-            Hole = gs_stats:get_hole(Prev, Round),
-            State#{hole_cnt:=Prev, hole:=Hole};
+            #{no := Prev, shots := Shots} = gs_stats:get_hole(Prev, Round),
+            State#{hole_cnt := Prev, shots := lists:reverse(Shots)};
         false ->
             State0
     end;
-handle_click(?RESET, #{hole := Hole, total := Total} = State0) ->
-    Shots = gs_stats:no_shots(Hole),
-    State0#{hole := gs_stats:empty(), total := Total-Shots};
+handle_click(?RESET, #{shots := Shots, total := Total} = State) ->
+    N = length(Shots),
+    State#{total := Total-N, shots := []};
 handle_click(?DONE, #{total:=Total, hole_cnt:=Cnt, course:=Course, date:=Date, parent:=Parent} = State) ->
     case Course /= undefined andalso Cnt > 1 andalso Total > 0 of
         false -> State;
@@ -143,44 +151,57 @@ handle_click(?DONE, #{total:=Total, hole_cnt:=Cnt, course:=Course, date:=Date, p
             Parent ! {new_round, Round},
             State#{hole_cnt=>1, hole=>gs_stats:empty(), round=>#{}, total=>0}
     end;
-handle_click(Button, #{hole:=Hole, total:=Total} = State) ->
+handle_click(Button, #{shots:=Shots, total:=Total} = State)
+  when (Button rem 10) =:= ?RESET_SHOT ->
     ShotId = Button div 10,
-    Shot = gs_stats:key(ShotId),
-    Prev = maps:get(Shot, Hole),
+    Club = gs_stats:key(ShotId),
+    case lists:splitwith(fun(#{club := Last}) -> Last =:= Club end, Shots) of
+        {[], _} -> % Can't reset club, reset hole
+            N = length(Shots),
+            State#{total := Total-N, shots := []};
+        {Del, Keep} ->
+            N = length(Del),
+            State#{total := Total-N, shots := Keep}
+    end;
+handle_click(Button, #{shots:=Shots, total:=Total} = State) ->
+    ShotId = Button div 10,
+    Club = gs_stats:key(ShotId),
     Result = case Button rem 10 of
                  1 -> bad;
                  2 -> good;
-                 3 -> perfect;
-                 4 -> reset
+                 3 -> perfect
              end,
-    {Counters, Shots} =
-        case Result of
-            reset ->
-                #{bad := S0, good := S1, perfect := S2} = Prev,
-                {#{bad => 0, good => 0, perfect => 0}, -S0-S1-S2};
-            _Other ->
-                {maps:update_with(Result, fun(V) -> V + 1 end, Prev), 1}
-        end,
-    Update = Hole#{Shot => Counters},
-    State#{hole:=Update, total:=Total+Shots}.
+    State#{shots:=[#{club => Club, Result => 1}|Shots], total:=Total+1}.
 
-current(#{hole_cnt:=No, hole:=Hole, total:=Total, pars:=Pars}) ->
-    Shots = gs_stats:no_shots(Hole),
+
+write_info(#{stat:=StatCtrl, shot_order:=ShotCtrl, shots:=Shots} = State) ->
+    wxStaticText:setLabel(StatCtrl, current(State)),
+    wxStaticText:setLabel(ShotCtrl, shot_order_string(Shots)).
+
+current(#{hole_cnt:=No, shots:=Shots, total:=Total, pars:=Pars}) ->
+    ShotCnt = length(Shots),
     Par = try lists:nth(No, Pars) catch _:_ -> 0 end,
-    current(No, Par, Shots, Total).
+    current(No, Par, ShotCnt, Total).
 
 current(Hole, Par, Shots, Total) ->
     io_lib:format("Hole: ~.2w  Par: ~.2w   Shots: ~.2w  Total: ~.2w", [Hole, Par, Shots, Total]).
 
-update_shots(#{hole:=Hole}) ->
-    Shots = lists:seq(1, length(gs_stats:shots())),
+update_shots(#{shots:=Shots}) ->
+    ShotTypes = lists:seq(1, length(gs_stats:shots())),
     Update = fun(ShotId) ->
-                     Added = maps:get(gs_stats:key(ShotId), Hole, #{default => 0}),
-                     Count = lists:sum(maps:values(Added)),
+                     Count = length(lists:filter(fun(#{club := Club}) -> Club =:= gs_stats:key(ShotId) end, Shots)),
                      StatTxt = wx:typeCast(wxWindow:findWindowById(ShotId*10), wxStaticText),
                      wxStaticText:setLabel(StatTxt, integer_to_list(Count))
              end,
-    [Update(Id) || Id <- Shots].
+    [Update(Id) || Id <- ShotTypes].
+
+shot_order_string(Shots) ->
+    [io_lib:format("~.2w: ~12s  ~s~n", [No, Club, verdict(Shot)]) ||
+        {No, #{club := Club} = Shot} <- lists:enumerate(lists:reverse(Shots))].
+
+verdict(#{bad := _}) -> bad;
+verdict(#{good := _}) -> good;
+verdict(#{perfect := _}) -> perfect.
 
 
 %% Gui stuff
@@ -217,7 +238,7 @@ cont_buttons(Panel, Sz) ->
     wxSizer:add(RowSz, wxButton:new(Panel, ?NEXT, [{label, "Next Hole"}]), Border),
     wxSizer:addSpacer(RowSz, 100),
     wxSizer:add(RowSz, wxButton:new(Panel, ?RESET, [{label, "Reset Hole"}]), Border),
-    wxSizer:add(RowSz, wxButton:new(Panel, ?DONE, [{label, "Done"}]), Border),
+    wxSizer:add(RowSz, wxButton:new(Panel, ?DONE, [{label, "Save Round"}]), Border),
 
     wxSizer:add(Sz, RowSz, [{border, 10}, {flag, ?wxLEFT}]).
 

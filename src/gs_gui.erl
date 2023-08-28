@@ -1,6 +1,7 @@
 -module(gs_gui).
 
 -export([start/0, start/1, start_halt/0, start_halt/1]).
+-export([make_mono_font/1]).
 
 -include_lib("wx/include/wx.hrl").
 -define(COURSE, 5).
@@ -30,7 +31,7 @@ start_halt(File) ->
     start(File, true).
 
 start(File, Stop) ->
-    Old = gs_stats:read(File),
+    Old = gs_stats:read_player(File),
     Dir = filename:dirname(File),
     gui(File, gs_stats:read_courses(Dir), Old),
     Stop andalso halt(0),
@@ -62,7 +63,7 @@ loop(#{frame := Frame, rounds:=Rounds} = State0) ->
     receive
         {new_round, Round} ->
             NewRounds = [Round|Rounds],
-            gs_stats:save(maps:get(file,State0), sort_rounds(NewRounds)),
+            gs_stats:save_player(maps:get(file,State0), sort_rounds(NewRounds)),
             Name = round_id(Round),
             Choice = maps:get(stat_sel, State0),
 
@@ -142,12 +143,7 @@ text_stats(Main, Rounds) ->
     wxChoice:connect(Choice,command_choice_selected),
     wxChoice:setSelection(Choice, 0),
     wxSizer:add(LSz, Choice, [{border, 10}, {flag, ?wxALL}]),
-    Font = case os:type() of
-               {unix, linux} ->
-                   wxFont:new(12, ?wxDEFAULT, ?wxNORMAL, ?wxNORMAL, [{face, "Noto Sans Mono CJK KR"}]);
-               _ ->
-                   wxFont:new(12, ?wxMODERN, ?wxNORMAL, ?wxNORMAL)
-           end,
+    Font = make_mono_font(12),
     %% io:format("~p: FontName: ~p~n",[?LINE, wxFont:getNativeFontInfoUserDesc(Font)]),
     Text = wxTextCtrl:new(Win, ?wxID_ANY, [{style, ?wxTE_MULTILINE bor ?wxTE_RICH2 bor ?wxTE_READONLY}]),
     wxWindow:setFont(Text, Font),
@@ -160,7 +156,8 @@ default_menus(Rounds) ->
     {ThisYear,_,_} = date(),
     Years = lists:reverse(lists:usort([ThisYear|Found])),
     YearsStrings = [integer_to_list(Year) || Year <- Years],
-    ["All Rounds"] ++ YearsStrings ++ ["Last 2", "Last 3", "Last 5", "Last 10", "Last 20"].
+    LastRounds = ["Last " ++ integer_to_list(Rs) || Rs <- [2,3,5,10,20], Rs =< length(Rounds)],
+    ["All Rounds"] ++ YearsStrings ++ LastRounds.
 
 show_stats(Sel, String, All, #{stat:=Stat, diag:=Ds}) ->
     Year = case string:to_integer(String) of
@@ -326,4 +323,12 @@ display_hcp(Widget, Result) ->
     catch Exit:Reason:ST ->
             io:format("~p:~P~n  ~P~n",[Exit,Reason,40,ST,40]),
             wxTextCtrl:setValue(Widget, "Couldn't parse data")
+    end.
+
+make_mono_font(Size) ->
+    case os:type() of
+        {unix, linux} ->
+            wxFont:new(Size, ?wxDEFAULT, ?wxNORMAL, ?wxNORMAL, [{face, "Noto Sans Mono CJK KR"}]);
+        _ ->
+            wxFont:new(Size, ?wxMODERN, ?wxNORMAL, ?wxNORMAL)
     end.
