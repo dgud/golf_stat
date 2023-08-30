@@ -17,6 +17,7 @@ start("") ->
 start(File) ->
     start(File, false).
 
+-spec start_halt() -> no_return().
 start_halt() ->
     FileName = case os:getenv("USERNAME") of
                false -> "player.json";
@@ -27,15 +28,23 @@ start_halt() ->
     File = filename:join(Dir, FileName),
     start(File, true).
 
+-spec start_halt(string()) -> no_return().
 start_halt(File) ->
     start(File, true).
 
+
+-spec start(string(), boolean()) -> no_return().
 start(File, Stop) ->
     Old = gs_stats:read_player(File),
     Dir = filename:dirname(File),
     gui(File, gs_stats:read_courses(Dir), Old),
-    Stop andalso halt(0),
+    quit(Stop),
     ok.
+
+-spec quit(boolean()) -> no_return().
+quit(true) ->  halt(0);
+quit(false) -> ok.
+
 
 gui(File, Courses, Rounds) ->
     wx:new(),

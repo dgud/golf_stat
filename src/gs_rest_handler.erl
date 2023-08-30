@@ -63,7 +63,7 @@ from_text(Req, [courses] = State) ->
 from_text(Req, [course] = State) ->
     IdStr = cowboy_req:binding(courseId, Req),
     try
-        {Id, _} = string:to_integer(IdStr),
+        {Id, <<>>} = string:to_integer(IdStr),
         case golf_stat:course(Id) of
             {ok, Course} ->
                 {json_encode(Course), Req, State};
@@ -71,8 +71,8 @@ from_text(Req, [course] = State) ->
                 {[], reply(400, unicode:characters_to_binary(String), Req), State}
         end
     catch _:Reason:ST ->
-            ?DBG("IdStr: ~p~n",[IdStr]),
-            ?DBG("~p~n  ~p~n",[Reason, ST]),
+            %% ?DBG("IdStr: ~p~n",[IdStr]),
+            %% ?DBG("~p~n  ~p~n",[Reason, ST]),
             {[], reply(400, <<"Wrong Course Id!">>, Req), State}
     end;
 

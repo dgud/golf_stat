@@ -499,9 +499,7 @@ compare(putts) -> fun lessthan/2;
 compare({putt, 1}) -> fun greathan/2;
 compare({putt, 2}) -> fun greathan/2;
 compare({putt, 3}) -> fun lessthan/2;
-compare({putt, n}) -> fun lessthan/2;
-compare(What) ->
-    io:format("~p: NYI compare ~p~n",[?LINE,What]).
+compare({putt, n}) -> fun lessthan/2.
 
 greathan(PA, PB) when PA >= PB ->
     [PA, [16#2197], PB];

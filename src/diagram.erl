@@ -60,6 +60,8 @@ handle_call({update, Labels, Data}, _, #{win:=Win}=State) ->
     wxWindow:refresh(Win),
     {reply, ok, State#{labels:=Labels, data:=Data}}.
 
+-spec draw(term(), map()) -> no_return().  %% Dialyzer error without info
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 draw(DC, #{win:=Win, font:=[_Font0,Font1]=Fonts, brushes:=Brushes, labels:=Labels, data:=Data} = State) ->
     {W,H} = wxWindow:getClientSize(Win),
