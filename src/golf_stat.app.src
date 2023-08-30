@@ -5,9 +5,10 @@
   {applications,
    [kernel,
     stdlib,
-    wx
+    cowboy
    ]},
   {env,[]},
+  {mod, {gs_sup, []}},
   {modules, []},
 
   {licenses, ["Apache 2.0"]},
