@@ -12,7 +12,7 @@
 
 %% API
 
--export([courses/0, course/1]).
+-export([courses/0, course/1, add_course/1]).
 
 -export([start_link/1]).
 
@@ -39,6 +39,17 @@ courses() ->
 course(Id) ->
     gen_server:call(?SERVER, {course, Id}).
 
+add_course(#{name := Bin, pars := List}=Course)
+  when is_binary(Bin), byte_size(Bin) > 3, is_list(List), length(List) > 9 ->
+    case lists:all(fun is_integer/1, List) of
+        true ->
+            gen_server:call(?SERVER, {add_course, Course});
+        false ->
+            {error, <<"Bad course pars"/utf8>>}
+    end;
+add_course(_) ->
+    {error, <<"Bad course data"/utf8>>}.
+
 start_link(Args) ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, Args, []).
 
@@ -58,10 +69,29 @@ handle_call({course, Id}, _From, #state{courses = Cs} = State) ->
                 Course = #{} = lists:nth(Id+1, Cs),
                 {reply, {ok, Course}, State}
             catch _:_ ->
-                    {reply, {error, <<"no such course id">>}, State}
+                    IdStr = integer_to_binary(Id),
+                    {reply, {error, <<"Could not find course id: ", IdStr/binary>>}, State}
+            end;
+       is_binary(Id) ->
+            case lists:search(fun(#{name:=Name}) -> string:equal(Name, Id, true) end, Cs) of
+                {value, Course} ->
+                    {reply, {ok, Course}, State};
+                false ->
+                    {reply, {error, <<"Could not find course id: ", Id/binary>>}, State}
             end;
        true ->
-            {reply, {error, <<"course string is NYI">>}, State}
+            ?DBG("Bad Id: ~p~n", [Id]),
+            {reply, {error, <<"Bad course string">>}, State}
+    end;
+
+handle_call({add_course, Course}, _From, #state{courses = Cs, dir = Dir} = State) ->
+    Id = maps:get(name, Course),
+    case lists:any(fun(#{name:=Name}) -> string:equal(Name, Id, true) end, Cs) of
+        true ->
+            {reply, {error, <<"Already exists"/utf8>>}, State};
+        false ->
+            NewCs = gs_stats:save_courses([Course|Cs], Dir),
+            {reply, ok, State#state{courses = NewCs}}
     end;
 
 handle_call(_Request, _From, State) ->

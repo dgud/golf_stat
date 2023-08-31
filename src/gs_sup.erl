@@ -27,7 +27,8 @@ start(_StartType, StartArgs) ->
                                       {'_', [
                                              {"/", gs_rest_handler, [hello]},
                                              {"/courses", gs_rest_handler, [courses]},
-                                             {"/course/:courseId", gs_rest_handler, [course]}
+                                             {"/course/:courseId", gs_rest_handler, [course]},
+                                             {"/add_course", gs_rest_handler, [add_course]}
                                             ]}
                                      ]),
     {ok, _} = cowboy:start_clear(my_http_listener,

@@ -29,13 +29,14 @@ init_per_testcase(_TestCase, Config) ->
     Config.
 
 end_per_testcase(_TestCase, _Config) ->
+    _ = application:stop(golf_stat),
     ok.
 
 groups() ->
     [].
 
 all() ->
-    [start_and_stop, fetch_courses].
+    [start_and_stop, fetch_courses, add_course].
 
 start_and_stop(_Config) ->
     {ok, _} = application:ensure_all_started(golf_stat),
@@ -58,13 +59,47 @@ fetch_courses(_Config) ->
     {ok, #{name := <<"Åkersberga Golfklubb"/utf8>>, pars := Pars30}} = get_request("course/30"),
     18 = length(Pars30),
 
+    RGK = base64:encode_to_string(<<"rättviks golfklubb"/utf8>>, #{mode => urlsafe}),
+    {ok, #{name := <<"Rättviks Golfklubb"/utf8>>, pars := ParsN}} = get_request("course/" ++ RGK),
+    18 = length(ParsN),
+
     {error, _} = get_request("course/31"),
     {error, _} = get_request("course/foobar"),
+
+    FooBar = base64:encode_to_string(<<"foobar"/utf8>>),
+    {error, _} = get_request("course/" ++ FooBar),
 
     ok = application:stop(golf_stat),
     ok.
 
-%%%%
+add_course(_Config) ->
+    {ok, _} = application:ensure_all_started(golf_stat),
+
+    CourseName = <<"foobar"/utf8>>,
+
+    {ok, OrigCs} = get_request("courses"),
+    false = lists:any(fun(Name) -> string:equal(Name, CourseName, true) end, OrigCs),
+
+    NewCourse = #{name => CourseName,
+                  pars => [3,3,3, 4,4,4, 5,5,5, 3,4,5, 3,4,5, 3,4,5]
+                 },
+    {ok, <<>>} = post("add_course", NewCourse),
+
+    {ok, NewCs} = get_request("courses"),
+    true = lists:any(fun(Name) -> string:equal(Name, CourseName, true) end, NewCs),
+    {ok, NewCourse} = get_request("course/" ++ base64:encode_to_string(CourseName)),
+
+    %% Error cases
+    {error, <<"\"Already exists\"">>} = post("add_course", NewCourse),
+    {error, <<"\"Bad course data\"">>} = post("add_course", #{name => <<"">>, pars => maps:get(pars, NewCourse)}),
+    {error, <<"\"Bad course data\"">>} = post("add_course", #{name => <<"bazzo">>, pars => <<"hej">>}),
+    {error, <<"\"Bad course data\"">>} = post("add_course", #{name => <<"bazzo">>, pars => [<<"hej">>]}),
+
+    {error, <<"\"Invalid json\"">>} = post_plain("add_course", "fooobarish"),
+    ok = application:stop(golf_stat),
+    ok.
+
+%%%%  HELPERS %%%
 
 url() ->
     "http://localhost:21137/".
@@ -80,8 +115,31 @@ get_request(Url0) ->
     HTTPOptions = [],
     Options = [{body_format, binary}],
     case httpc:request(Method, {Url, Header}, HTTPOptions, Options) of
-        {ok, {{_,200,_} = Status, SHeader, SBody}} ->
-            %% ct:pal("~p: GOT: ~p ~p ~.p~n", [?LINE, Status, SHeader, SBody]),
+        {ok, {{_,200,_} = _Status, _SHeader, SBody}} ->
+            %% ct:pal("~p: GOT: ~p ~p ~.p~n", [?LINE, _Status, _SHeader, SBody]),
+            {ok, jsone:decode(SBody, [{keys, atom}])};
+        {ok, {Status, _, SBody}} ->
+            ct:pal("~p: GOT: ~p ~p~n", [?LINE, Status, SBody]),
+            {error, SBody}
+    end.
+
+post(Url0, Msg) ->
+    post_plain(Url0, gs_lib:json_encode(Msg)).
+
+post_plain(Url0, Body) ->
+    Method = post,
+    Url = url() ++ Url0,
+    Header = [],
+    Type = "application/json",
+    HTTPOptions = [],
+    Options = [{body_format, binary}],
+    case httpc:request(Method, {Url, Header, Type, Body}, HTTPOptions, Options) of
+        {ok, {{_,200,_} = _Status, _SHeader, SBody}} ->
+            ct:pal("~p: GOT: ~p ~p ~.p~n", [?LINE, _Status, _SHeader, SBody]),
+            {ok, jsone:decode(SBody, [{keys, atom}])};
+        {ok, {{_,204,_} = _Status, _SHeader, <<>>}} ->
+            {ok, <<>>};
+        {ok, {{_,204,_} = _Status, _SHeader, SBody}} ->
             {ok, jsone:decode(SBody, [{keys, atom}])};
         {ok, {Status, _, SBody}} ->
             ct:pal("~p: GOT: ~p ~p~n", [?LINE, Status, SBody]),

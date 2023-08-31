@@ -26,7 +26,7 @@
 -export([from_json/2]).
 -export([from_text/2]).
 
--import(gs_lib, [json_encode/1, json_decode/2, reply/3]).
+-import(gs_lib, [json_encode/1, json_decode/1, base64_decode/1, reply/3]).
 
 %% Helpes
 %% -import(helper, [get_body/2, get_model/3, reply/3, pwd2hash/1]).
@@ -63,17 +63,21 @@ from_text(Req, [courses] = State) ->
 from_text(Req, [course] = State) ->
     IdStr = cowboy_req:binding(courseId, Req),
     try
-        {Id, <<>>} = string:to_integer(IdStr),
+        Id = case string:to_integer(IdStr) of
+                 {Int, <<>>} -> Int;
+                 _ -> base64_decode(IdStr)
+             end,
         case golf_stat:course(Id) of
             {ok, Course} ->
                 {json_encode(Course), Req, State};
             {error, String} ->
                 {[], reply(400, unicode:characters_to_binary(String), Req), State}
         end
-    catch _:Reason:ST ->
+    catch _:_Reason:_ST ->
             %% ?DBG("IdStr: ~p~n",[IdStr]),
-            %% ?DBG("~p~n  ~p~n",[Reason, ST]),
-            {[], reply(400, <<"Wrong Course Id!">>, Req), State}
+            %% ?DBG("~p~n  ~p~n",[_Reason, _ST]),
+            Error = <<"Bad format course id, support number or base64 encoded utf8 string!"/utf8>>,
+            {[], reply(400, Error, Req), State}
     end;
 
 from_text(Req, [hello]=State) ->
@@ -86,11 +90,41 @@ from_text(Req, State) ->
     Msg = <<"Hello Text Caller">>,
     {json_encode(Msg), Req, State}.
 
+from_json(Req0, [add_course] = State) ->
+    case get_json_body(Req0) of
+        {ok, Json, Req1} ->
+            case golf_stat:add_course(Json) of
+                ok ->
+                    {true, Req1, State};
+                {error, Desc} ->
+                    post_error(Desc, Req1, State)
+            end;
+        {error, Desc, Req1} ->
+            post_error(Desc, Req1, State)
+    end;
 from_json(Req, State) ->
     ?DBG("~p ~n", [Req]),
     Msg = <<"Hello Json Caller">>,
     {json_encode(Msg), Req, State}.
 
+post_error(Error, Req0, State) ->
+    Req = reply(400, Error, Req0),
+    {false, Req, State}.
+
+get_json_body(Req0) ->
+    case cowboy_req:read_urlencoded_body(Req0) of
+        {ok, [{Body, true}], Req} ->
+            try
+                Data = json_decode(Body),
+                {ok, Data, Req}
+            catch _:_ ->
+                    {error, <<"Invalid json"/utf8>>, Req}
+            end;
+        {ok, [], Req} ->
+            {error, <<"Missing body"/utf8>>, Req};
+        {ok, _, Req} ->
+            {error, <<"Bad request"/utf8>>, Req}
+    end.
 
 %% register_from_json(Req, State) ->
 %%     {ok, Body, Req1} = cowboy_req:read_urlencoded_body(Req),

@@ -11,6 +11,8 @@
 -export(
    [json_encode/1,
     json_decode/1,
+    base64_encode/1,
+    base64_decode/1,
     reply/3
    ]).
 
@@ -21,6 +23,11 @@ json_encode(ListOrMap) ->
 json_decode(Bin) ->
     jsone:decode(Bin, [{keys, atom}]).
 
+base64_encode(Bin) when is_binary(Bin) ->
+    base64:encode(Bin, #{mode => urlsafe}).
+
+base64_decode(Bin) when is_binary(Bin) ->
+    base64:decode(Bin, #{mode => urlsafe}).
 
 reply(Code, Body, Req) ->
     cowboy_req:reply(Code, #{<<"content-type">> => <<"application/json">>}, json_encode(Body), Req).
