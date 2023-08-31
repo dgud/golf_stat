@@ -60,8 +60,6 @@ handle_call({update, Labels, Data}, _, #{win:=Win}=State) ->
     wxWindow:refresh(Win),
     {reply, ok, State#{labels:=Labels, data:=Data}}.
 
--spec draw(term(), map()) -> no_return().  %% Dialyzer error without info
-
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 draw(DC, #{win:=Win, font:=[_Font0,Font1]=Fonts, brushes:=Brushes, labels:=Labels, data:=Data} = State) ->
     {W,H} = wxWindow:getClientSize(Win),
@@ -73,10 +71,10 @@ draw(DC, #{win:=Win, font:=[_Font0,Font1]=Fonts, brushes:=Brushes, labels:=Label
 
     X0 = TW + 30.0,
     Y0 = 10.0,
-    YM = H - 50,
-    XM = W - 10,
+    YM = H - 50.0,
+    XM = W - 10.0,
 
-    wxGraphicsContext:drawLines(Canvas, [{X0,Y0-5}, {X0, YM}, {XM, YM}]),
+    wxGraphicsContext:drawLines(Canvas, [{X0,Y0-5.0}, {X0, YM}, {XM, YM}]),
 
     Max0 = lists:foldl(fun({_, Vs}, Max) -> max(Max, lists:max(Vs)) end, 0.0, Data),
     Marks = if Max0 > 100 -> lists:seq(0, 200, 50);
