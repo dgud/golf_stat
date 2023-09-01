@@ -35,9 +35,11 @@ start_halt(File) ->
 
 -spec start(string(), boolean()) -> no_return().
 start(File, Stop) ->
+    Dir = filename:dirname(File),
+    {ok, _} = golf_stat:start_link(#{dir => Dir}),
     Old = gs_stats:read_player(File),
     Dir = filename:dirname(File),
-    gui(File, gs_stats:read_courses(Dir), Old),
+    gui(File, Old),
     quit(Stop),
     ok.
 
@@ -46,7 +48,7 @@ quit(true) ->  halt(0);
 quit(false) -> ok.
 
 
-gui(File, Courses, Rounds) ->
+gui(File, Rounds) ->
     wx:new(),
     Frame = wxFrame:new(wx:null(), ?wxID_ANY, "Golf Stats", [{size, {1400, 950}}]),
     wxFrame:connect(Frame, close_window),
@@ -54,14 +56,14 @@ gui(File, Courses, Rounds) ->
     try
         {AddText,Stat, StatSel, Diags} = stats_page(NB, Rounds),
         wxBookCtrlBase:addPage(NB, AddText, "View Statistics", []),
-        AddCourse = gs_gui_round:start(NB, self(), Courses),
+        AddCourse = gs_gui_round:start(NB, self()),
         wxBookCtrlBase:addPage(NB, AddCourse, "Add Round", []),
         {AddHcp,Hcp} = hcp_page(NB),
         wxBookCtrlBase:addPage(NB, AddHcp, "Calculate HCP", []),
         set_icon(Frame),
         wxFrame:show(Frame),
         loop(#{file => File, frame => Frame, stat => Stat, stat_sel => StatSel, diag => Diags,
-               rounds=>Rounds, courses=>Courses, hcp => Hcp})
+               rounds=>Rounds, hcp => Hcp})
     catch Err:Reason:ST ->
             io:format("~p ~P~n ~P~n",[Err,Reason,20,ST,15]),
             error(sorry)
@@ -83,11 +85,8 @@ loop(#{frame := Frame, rounds:=Rounds} = State0) ->
             show_stats(Def, Name, NewRounds, State),
             loop(State);
         {new_course, Course} ->
-            NewCourses = [Course|maps:get(courses, State0)],
-            RFile = maps:get(file, State0),
-            Dir = filename:dirname(RFile),
-            gs_stats:save_courses(NewCourses, Dir),
-            loop(State0#{courses:=NewCourses});
+            {ok, _} = golf_stat:add_course(Course),
+            loop(State0#{});
         #wx{event=#wxCommand{type=command_choice_selected, commandInt=Rnd, cmdString=Str}} ->
             try show_stats(Rnd, Str, Rounds, State0)
             catch _:Err:ST -> io:format("Error ~P~n ~P~n",[Err, 20, ST, 20])

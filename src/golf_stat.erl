@@ -35,19 +35,22 @@
 courses() ->
     gen_server:call(?SERVER, courses).
 
--spec course(Id :: integer()) -> {ok, [integer()]} | {error, binary()}.
+-spec course(Id :: integer()) -> {ok, Course::map()} | {error, binary()}.
 course(Id) ->
     gen_server:call(?SERVER, {course, Id}).
 
+-spec add_course(Id :: integer() | string()) ->
+          {ok, [CourseName::string()]} | {error, binary()}.
 add_course(#{name := Bin, pars := List}=Course)
-  when is_binary(Bin), byte_size(Bin) > 3, is_list(List), length(List) > 9 ->
+  when is_binary(Bin), byte_size(Bin) > 3, is_list(List), length(List) >= 9 ->
     case lists:all(fun is_integer/1, List) of
         true ->
             gen_server:call(?SERVER, {add_course, Course});
         false ->
             {error, <<"Bad course pars"/utf8>>}
     end;
-add_course(_) ->
+add_course(_Bad) ->
+    ?DBG("~p", [_Bad]),
     {error, <<"Bad course data"/utf8>>}.
 
 start_link(Args) ->
@@ -91,7 +94,8 @@ handle_call({add_course, Course}, _From, #state{courses = Cs, dir = Dir} = State
             {reply, {error, <<"Already exists"/utf8>>}, State};
         false ->
             NewCs = gs_stats:save_courses([Course|Cs], Dir),
-            {reply, ok, State#state{courses = NewCs}}
+            Names = [Name || #{name := Name} <- NewCs],
+            {reply, {ok, Names}, State#state{courses = NewCs}}
     end;
 
 handle_call(_Request, _From, State) ->

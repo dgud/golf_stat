@@ -70,14 +70,14 @@ from_text(Req, [course] = State) ->
         case golf_stat:course(Id) of
             {ok, Course} ->
                 {json_encode(Course), Req, State};
-            {error, String} ->
-                {[], reply(400, unicode:characters_to_binary(String), Req), State}
+            {error, ErrString} ->
+                get_error(ErrString, Req, State)
         end
     catch _:_Reason:_ST ->
             %% ?DBG("IdStr: ~p~n",[IdStr]),
             %% ?DBG("~p~n  ~p~n",[_Reason, _ST]),
             Error = <<"Bad format course id, support number or base64 encoded utf8 string!"/utf8>>,
-            {[], reply(400, Error, Req), State}
+            get_error(Error, Req, State)
     end;
 
 from_text(Req, [hello]=State) ->
@@ -94,8 +94,8 @@ from_json(Req0, [add_course] = State) ->
     case get_json_body(Req0) of
         {ok, Json, Req1} ->
             case golf_stat:add_course(Json) of
-                ok ->
-                    {true, Req1, State};
+                {ok, Cs} ->
+                    post_reply(Cs, Req1, State);
                 {error, Desc} ->
                     post_error(Desc, Req1, State)
             end;
@@ -107,9 +107,19 @@ from_json(Req, State) ->
     Msg = <<"Hello Json Caller">>,
     {json_encode(Msg), Req, State}.
 
-post_error(Error, Req0, State) ->
-    Req = reply(400, Error, Req0),
+post_reply(Msg, Req0, State) ->
+    Req1 = cowboy_req:set_resp_header(<<"content-type">>, <<"application/json">>, Req0),
+    Req = cowboy_req:set_resp_body(json_encode(Msg), Req1),
+    {true, Req, State}.
+
+post_error(Error, Req0, State) when is_binary(Error) ->
+    %% Req1 = cowboy_req:set_resp_header(#{<<"content-type">> => <<"application/json">>}, Req0),
+    Req = cowboy_req:set_resp_body(Error, Req0),
     {false, Req, State}.
+
+get_error(Error, Req, State) when is_binary(Error) ->
+    %% Header = #{<<"content-type">> => <<"application/json">>}
+    {stop, cowboy_req:reply(400, #{}, Error, Req), State}.
 
 get_json_body(Req0) ->
     case cowboy_req:read_urlencoded_body(Req0) of
