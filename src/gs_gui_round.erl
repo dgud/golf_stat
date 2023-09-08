@@ -149,7 +149,8 @@ handle_click(?DONE, #{total:=Total, hole_cnt:=Cnt, course:=Course, date:=Date, p
             Round1 = gs_stats:set_round_data(course, unicode:characters_to_list(Course), Round0),
             Round = gs_stats:set_round_data(date, Date, Round1),
             Parent ! {new_round, Round},
-            State#{hole_cnt=>1, hole=>gs_stats:empty(), round=>#{}, total=>0}
+            State#{hole_cnt=>1, hole=>gs_stats:empty(), shots => [],
+                   round=>#{}, total=>0}
     end;
 handle_click(Button, #{shots:=Shots, total:=Total} = State)
   when (Button rem 10) =:= ?RESET_SHOT ->
