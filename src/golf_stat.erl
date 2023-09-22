@@ -35,6 +35,8 @@
 
 -type bstring() :: unicode:unicode_binary().
 
+-type err() :: {error, bstring()}.
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -43,12 +45,12 @@
 courses() ->
     gen_server:call(?SERVER, courses).
 
--spec course(Id :: integer()) -> {ok, Course::map()} | {error, bstring()}.
+-spec course(Id :: integer()) -> {ok, Course::map()} | err().
 course(Id) ->
     gen_server:call(?SERVER, {course, Id}).
 
 -spec add_course(Id :: integer() | string()) ->
-          {ok, [CourseName::bstring()]} | {error, bstring()}.
+          {ok, [CourseName::bstring()]} | err().
 add_course(#{name := Bin, pars := List}=Course)
   when is_binary(Bin), byte_size(Bin) > 3, is_list(List), length(List) >= 9 ->
     case lists:all(fun is_integer/1, List) of
@@ -58,23 +60,28 @@ add_course(#{name := Bin, pars := List}=Course)
             {error, <<"Bad course pars"/utf8>>}
     end;
 add_course(_Bad) ->
-    ?DBG("~p", [_Bad]),
+    ?DBG("Bad course data: ~0.P~n", [_Bad, 20]),
     {error, <<"Bad course data"/utf8>>}.
 
--spec user_round_selection(User :: userId()) -> {ok, [bstring()]}.
+-spec user_round_selection(User :: userId()) -> {ok, [bstring()]} | err().
 user_round_selection(User) ->
     gen_server:call(?SERVER, {user_round_selection, to_user_atom(User)}).
 
--spec user_diagram_data(User :: userId(), Sel::bstring()) -> {ok, {term(), [bstring()]}}.
-user_diagram_data(User, Selection) ->
-    gen_server:call(?SERVER, {user_diagram_data, to_user_atom(User), Selection}).
+-spec user_diagram_data(User :: userId(), Sel::bstring()) -> {ok, {term(), [bstring()]}} | err().
+user_diagram_data(User, Selection) when is_binary(Selection) ->
+    gen_server:call(?SERVER, {user_diagram_data, to_user_atom(User), Selection});
+user_diagram_data(_, _Selection) ->
+    {error, <<"Bad selection">>}.
 
--spec user_stats_string(User :: userId(), Sel::bstring()) -> {ok, bstring()}.
-user_stats_string(User, Selection) ->
-    gen_server:call(?SERVER, {user_stats_string, to_user_atom(User), Selection}).
+-spec user_stats_string(User :: userId(), Sel::bstring()) -> {ok, bstring()} | err().
+user_stats_string(User, Selection) when is_binary(Selection) ->
+    gen_server:call(?SERVER, {user_stats_string, to_user_atom(User), Selection});
+user_stats_string(_, _Selection) ->
+    {error, <<"Bad selection">>}.
 
--spec add_round(User :: userId(), Round::map()) -> {ok, bstring()}.
-add_round(User, Round) when is_map(Round) ->
+
+-spec add_round(User :: userId(), Round::map()) -> {ok, bstring()} | err().
+add_round(User, Round) ->
     gen_server:call(?SERVER, {add_round, to_user_atom(User), Round}).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -169,21 +176,26 @@ handle_call({user_diagram_data, User, SelString}, _From, #state{users = Users} =
                           {Data, Labels} = diagram_data(Desc, SelRounds, Rest),
                           {ok, {Labels, Data}};
                       not_found ->
-                          {error, <<"No such round">>}
+                          {error, <<"No such round: ", SelString/binary>>}
                   end
           end,
     {reply, Res, State};
 
-handle_call({add_round, User, Round}, _From, #state{users = Users} = State) ->
+handle_call({add_round, User, Round0}, _From, #state{users = Users, courses = Cs} = State) ->
     case maps:get(User, Users, undefined) of
         undefined ->
             Res = {error, <<"No such user: ", (atom_to_binary(User))/binary >>},
             {reply, Res, State};
         #{file := File, rounds := Rounds} = UserData ->
-            NewRounds = [Round|Rounds],
-            ok = gs_stats:save_player(File, sort_rounds(NewRounds)),
-            Res = {ok, round_id(Round)},
-            {reply, Res, State#state{users = Users#{User := UserData#{rounds := NewRounds}}}}
+            case verify_new_round(Round0, Cs) of
+                {ok, Round} ->
+                    NewRounds = [Round|Rounds],
+                    ok = gs_stats:save_player(File, sort_rounds(NewRounds)),
+                    Res = {ok, round_id(Round)},
+                    {reply, Res, State#state{users = Users#{User := UserData#{rounds := NewRounds}}}};
+                Error ->
+                    {reply, Error, State}
+            end
     end;
 
 handle_call(_Request, _From, State) ->
@@ -217,11 +229,15 @@ round_id(#{course:=Name, date:=[Y,M,D]}) ->
     unicode:characters_to_binary(io_lib:format("~ts ~w-~2..0w-~2..0w", [Name,Y,M,D])).
 
 id_to_name_and_date(Str0) ->
-    [Str1, Day] = string:split(Str0, "-", trailing),
-    [Str2, Month] = string:split(Str1, "-", trailing),
-    [Name, Year] = string:split(Str2, " ", trailing),
-    {unicode:characters_to_list(Name),
-     [binary_to_integer(Year), binary_to_integer(Month), binary_to_integer(Day)]}.
+    try
+        [Str1, Day] = string:split(Str0, "-", trailing),
+        [Str2, Month] = string:split(Str1, "-", trailing),
+        [Name, Year] = string:split(Str2, " ", trailing),
+        {unicode:characters_to_list(Name),
+         [binary_to_integer(Year), binary_to_integer(Month), binary_to_integer(Day)]}
+    catch _:_ ->
+            {"undefined", [0,0,0]}
+    end.
 
 find_round(String, Rounds) ->
     {Name, Date} = id_to_name_and_date(String),
@@ -334,17 +350,17 @@ split_years(Current, Rounds) when Current > 1900 ->
 date_str([H|_], N) ->
     date_str(H,N);
 date_str(#{date:=[_Y,M,D]}, N) ->
-    io_lib:format("~w/~w(~w)", [D,M,N]);
+    unicode:characters_to_binary(io_lib:format("~w/~w(~w)", [D,M,N]));
 date_str(Year, N) when is_integer(Year) ->
-    io_lib:format("~w(~w)", [Year, N]).
+    unicode:characters_to_binary(io_lib:format("~w(~w)", [Year, N])).
 
 diagram_data([]) ->
     D0 = gs_stats:diagram_data([]),
-    Init = [[{T,[D]} || {T,D} <- D1] || D1 <- D0],
+    Init = [[#{label => T, data => [D]} || {T,D} <- D1] || D1 <- D0],
     merge_data([], Init);
 diagram_data([Hd|Rounds]) ->
     D0 = gs_stats:diagram_data(Hd),
-    Init = [[{T,[D]} || {T,D} <- D1] || D1 <- D0],
+    Init = [[#{label => T, data => [D]} || {T,D} <- D1] || D1 <- D0],
     merge_data(Rounds, Init).
 
 merge_data([R|Rs], DataLists) ->
@@ -352,10 +368,10 @@ merge_data([R|Rs], DataLists) ->
     Acc = [merge_data2(R1, D1) || {R1,D1} <- lists:zip(RDs,DataLists)],
     merge_data(Rs, Acc);
 merge_data([], Acc) ->
-    [[{T,lists:reverse(D)} || {T,D} <- D1] || D1 <- Acc].
+    [[#{label => T, data => lists:reverse(D)} || #{label := T, data := D} <- D1] || D1 <- Acc].
 
-merge_data2([{T,D}|R], [{T,C}|CR]) ->
-    [{T,[D|C]} | merge_data2(R, CR)];
+merge_data2([{T, D}|R], [#{label := T, data := C}|CR]) ->
+    [#{label => T, data => [D|C]} | merge_data2(R, CR)];
 merge_data2([], []) ->
     [].
 
@@ -363,4 +379,48 @@ sort_rounds(Rounds) ->
     Order = fun(#{date := A},#{date := B}) -> A >= B end,
     lists:sort(Order, Rounds).
 
+verify_new_round(#{course:=Course0, date:=Date0} = Orig, Cs) ->
+    try
+        case is_binary(Date0) of
+            true ->
+                #{holes := Hs} = New = gs_stats:convert_map_from_json(Orig),
+                {value, _} = lists:search(fun(#{name := Name}) -> Name == Course0 end, Cs),
+                true = is_list(Hs),
+                case lists:foldl(fun verify_new_hole/2, ok, Hs) of
+                    {error, _} = Err -> Err;
+                    ok -> {ok, New}
+                end;
+            false ->
+                {ok, Orig}
+        end
+    catch _:_Err:_St ->
+            ?DBG("Bad round: ~P~n ~P~n ~P~n",[Orig, 20, _Err, 20, _St, 20]),
+            {error, <<"Bad round data">>}
+    end;
+verify_new_round(_Orig, _) ->
+    ?DBG("Bad round: ~P~n",[_Orig, 20]),
+    {error, <<"Bad round data">>}.
 
+verify_new_hole(#{no := N, par := Par, shots := Shots}, Err) ->
+    try
+        true = is_integer(N),
+        true = lists:member(Par, [3,4,5]),
+        true = lists:all(fun(S) -> verify_shot(lists:sort(maps:to_list(S))) end, Shots),
+        Err
+    catch _:_Err:_St ->
+            ?DBG("Bad hole: ~p ~p~n",[N, Par]),
+            {error, unicode:characters_to_binary(io_lib:format("Bad hole data: ~w", [N]))}
+    end;
+verify_new_hole(_Hole, _Err) ->
+    ?DBG("Bad hole ~p~n",[_Hole]),
+    {error, <<"Bad hole data">>}.
+
+verify_shot([{bad, 1}, {club, Club}]) ->
+    lists:member(Club, gs_stats:keys());
+verify_shot([{club, Club}, {good, 1}]) ->
+    lists:member(Club, gs_stats:keys());
+verify_shot([{club, Club}, {perfect, 1}]) ->
+    lists:member(Club, gs_stats:keys());
+verify_shot(_Bad) ->
+    ?DBG("Bad shot ~p~n",[_Bad]),
+    false.

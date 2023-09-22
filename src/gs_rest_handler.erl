@@ -15,6 +15,8 @@
 
 -include("golf_stat.hrl").
 
+-export([init_cowboy/1]).
+
 %% REST Callbacks
 -export([init/2]).
 -export([allowed_methods/2]).
@@ -30,6 +32,23 @@
 
 %% Helpes
 %% -import(helper, [get_body/2, get_model/3, reply/3, pwd2hash/1]).
+
+init_cowboy(Port) ->
+    Dispatch = cowboy_router:compile([
+                                      {'_', [
+                                             {"/", gs_rest_handler, [hello]},
+                                             {"/courses", gs_rest_handler, [courses]},
+                                             {"/course/:courseId", gs_rest_handler, [course]},
+                                             {"/add_course", gs_rest_handler, [add_course]},
+                                             {"/user", gs_rest_handler, [user]}
+                                            ]}
+                                     ]),
+    {ok, _} = cowboy:start_clear(my_http_listener,
+                                 [{port, Port}],
+                                 #{env => #{dispatch => Dispatch},
+                                   middlewares => [cowboy_router, cowboy_handler]
+                                  }),
+    ok.
 
 %% Cowboy REST callbacks
 init(Req, State) ->
@@ -102,10 +121,60 @@ from_json(Req0, [add_course] = State) ->
         {error, Desc, Req1} ->
             post_error(Desc, Req1, State)
     end;
-from_json(Req, State) ->
-    ?DBG("~p ~n", [Req]),
+from_json(CS0, [user] = State) ->
+    case get_json_body(CS0) of
+        {ok, #{req := Op} = Req, CS1} ->
+            handle_post_request(binary_to_atom(Op), Req, CS1, State);
+        {ok, _BadReq, CS1} ->
+            ?DBG("Bad req: ~p~n", [_BadReq]),
+            post_error(<<"Bad request, no req">>, CS1, State);
+        {error, Desc, CS1} ->
+            post_error(Desc, CS1, State)
+    end;
+from_json(CS, State) ->
+    ?DBG("~p ~n", [CS]),
     Msg = <<"Hello Json Caller">>,
-    {json_encode(Msg), Req, State}.
+    {json_encode(Msg), CS, State}.
+
+%%%
+
+handle_post_request(selections, #{user := User}, CS, State) ->
+    case golf_stat:user_round_selection(User) of
+        {ok, Selections} ->
+            post_reply(Selections, CS, State);
+        {error, Desc} ->
+            post_error(Desc, CS, State)
+    end;
+
+handle_post_request(stats_string, #{user := User, selection := Sel}, CS, State) ->
+    case golf_stat:user_stats_string(User, Sel) of
+        {ok, Stats} ->
+            post_reply(Stats, CS, State);
+        {error, Desc} ->
+            post_error(Desc, CS, State)
+    end;
+
+handle_post_request(stats_diagram, #{user := User, selection := Sel}, CS, State) ->
+    case golf_stat:user_diagram_data(User, Sel) of
+        {ok, {Lbls, Stats}} ->
+            DiagramData = #{labels => Lbls, diagrams => Stats},
+            post_reply(DiagramData, CS, State);
+        {error, Desc} ->
+            post_error(Desc, CS, State)
+    end;
+
+handle_post_request(add_round, #{user := User, round := Round}, CS, State) ->
+    case golf_stat:add_round(User, Round) of
+        {ok, IdStr} ->
+            post_reply(IdStr, CS, State);
+        {error, Desc} ->
+            post_error(Desc, CS, State)
+    end;
+
+handle_post_request(Req, _User, CS, State) ->
+    post_error(<<"Unknown Request (or missing data): ", (atom_to_binary(Req))/binary>>, CS, State).
+
+%%%
 
 post_reply(Msg, Req0, State) ->
     Req1 = cowboy_req:set_resp_header(<<"content-type">>, <<"application/json">>, Req0),
@@ -122,18 +191,19 @@ get_error(Error, Req, State) when is_binary(Error) ->
     {stop, cowboy_req:reply(400, #{}, Error, Req), State}.
 
 get_json_body(Req0) ->
-    case cowboy_req:read_urlencoded_body(Req0) of
-        {ok, [{Body, true}], Req} ->
+    %% Should we use cowboy_req:read_urlencoded_binary/1
+    %% but then we need to  url_encod the json
+    case cowboy_req:read_body(Req0) of
+        {ok, <<>>, Req} ->
+            {error, <<"Missing body"/utf8>>, Req};
+        {ok, Body, Req} ->
             try
                 Data = json_decode(Body),
                 {ok, Data, Req}
-            catch _:_ ->
+            catch _:_What:_ST ->
+                    %% ?DBG("JSON error: ~p~n ~p~n ~p~n",[_What, _ST, Body]),
                     {error, <<"Invalid json"/utf8>>, Req}
-            end;
-        {ok, [], Req} ->
-            {error, <<"Missing body"/utf8>>, Req};
-        {ok, _, Req} ->
-            {error, <<"Bad request"/utf8>>, Req}
+            end
     end.
 
 %% register_from_json(Req, State) ->

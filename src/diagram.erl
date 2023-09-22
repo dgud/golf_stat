@@ -76,7 +76,7 @@ draw(DC, #{win:=Win, font:=[_Font0,Font1]=Fonts, brushes:=Brushes, labels:=Label
 
     wxGraphicsContext:drawLines(Canvas, [{X0,Y0-5.0}, {X0, YM}, {XM, YM}]),
 
-    Max0 = lists:foldl(fun({_, Vs}, Max) -> max(Max, lists:max(Vs)) end, 0.0, Data),
+    Max0 = lists:foldl(fun(#{data:= Vs}, Max) -> max(Max, lists:max(Vs)) end, 0.0, Data),
     Marks = if Max0 > 100 -> lists:seq(0, 200, 50);
                Max0 > 50  -> lists:seq(0, 100, 25);
                Max0 > 20  -> lists:seq(0, 50, 10);
@@ -153,7 +153,7 @@ drawbars(X0,XM,Y0,YM, Max, Canvas, [Font0,Font1], {_, Brushes}, Labels, Data) ->
                       {N+1, X+BW+3}
               end,
 
-    DrawBoxes = fun({Label, D}, Start) ->
+    DrawBoxes = fun(#{label:=Label, data := D}, Start) ->
                         wxGraphicsContext:setFont(Canvas, Font1, {0, 0, 50}),
                         {StrW, _, _, _} = wxGraphicsContext:getTextExtent(Canvas, Label),
                         wxGraphicsContext:drawText(Canvas, Label, Start+5, YM+5),

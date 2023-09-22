@@ -23,19 +23,7 @@
 
 
 start(_StartType, StartArgs) ->
-    Dispatch = cowboy_router:compile([
-                                      {'_', [
-                                             {"/", gs_rest_handler, [hello]},
-                                             {"/courses", gs_rest_handler, [courses]},
-                                             {"/course/:courseId", gs_rest_handler, [course]},
-                                             {"/add_course", gs_rest_handler, [add_course]}
-                                            ]}
-                                     ]),
-    {ok, _} = cowboy:start_clear(my_http_listener,
-                                 [{port, ?DEFAULT_PORT}],
-                                 #{env => #{dispatch => Dispatch},
-                                   middlewares => [cowboy_router, cowboy_handler]
-                                  }),
+    ok = gs_rest_handler:init_cowboy(?DEFAULT_PORT),
     %% ?DBG("START: ~p ~p~n",[_StartType, StartArgs]),
     Arg = case proplists:get_value(dir, StartArgs) of
               undefined -> #{dir => os:getenv("GS_DIR")};
