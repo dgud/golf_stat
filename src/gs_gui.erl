@@ -32,15 +32,12 @@ start_halt() ->
 start_halt(File) ->
     start(File, true).
 
-
 -spec start(string(), boolean()) -> no_return().
 start(File, Stop) ->
     Dir = filename:dirname(File),
     {ok, _} = golf_stat:start_link(#{dir => Dir}),
-    [User|_] = string:split(filename:basename(File), "_stat.erl"),
-    %% Old = gs_stats:read_player(File),
-    Dir = filename:dirname(File),
-    gui(File, User),
+    [User|_] = string:split(filename:basename(File), "_stat.json"),
+    gui(User),
     quit(Stop),
     ok.
 
@@ -48,16 +45,15 @@ start(File, Stop) ->
 quit(true) ->  halt(0);
 quit(false) -> ok.
 
-
-gui(File, User) ->
+gui(User) ->
     wx:new(),
     Frame = wxFrame:new(wx:null(), ?wxID_ANY, "Golf Stats", [{size, {1400, 950}}]),
     wxFrame:connect(Frame, close_window),
     NB = wxNotebook:new(Frame, ?wxID_ANY),
     try
-        Menus = golf_stat:user_round_selections(User),
+        {ok, Menus} = golf_stat:user_round_selection(User),
         {AddText, Stat, StatSel, Diags} = stats_page(NB, Menus),
-        show_stats(undefined, "All Rounds", User, #{stat=>Stat, diag=>Diags}),
+        show_stats(<<"All Rounds">>, User, #{stat=>Stat, diag=>Diags}),
 
         wxBookCtrlBase:addPage(NB, AddText, "View Statistics", []),
         AddCourse = gs_gui_round:start(NB, self()),
@@ -78,6 +74,17 @@ gui(File, User) ->
 loop(#{frame := Frame, user:=User} = State0) ->
     receive
         {new_round, Round} ->
+            {ok, IdStr} = golf_stat:add_round(User, Round),
+            Choice = maps:get(stat_sel, State0),
+            wxChoice:clear(Choice),
+            {ok, Menus} = golf_stat:user_round_selection(User),
+            wxChoice:insertStrings(Choice, Menus, 0),
+            wxChoice:setStringSelection(Choice, IdStr),
+
+            try show_stats(IdStr, User, State0)
+            catch _:Err:ST -> io:format("Error ~P~n ~P~n",[Err, 20, ST, 20])
+            end,
+
             %% NewRounds = [Round|Rounds],
             %% gs_stats:save_player(maps:get(file,State0), sort_rounds(NewRounds)),
             %% Name = round_id(Round),
@@ -92,8 +99,8 @@ loop(#{frame := Frame, user:=User} = State0) ->
         {new_course, Course} ->
             {ok, _} = golf_stat:add_course(Course),
             loop(State0#{});
-        #wx{event=#wxCommand{type=command_choice_selected, commandInt=Rnd, cmdString=Str}} ->
-            try show_stats(Rnd, Str, User, State0)
+        #wx{event=#wxCommand{type=command_choice_selected, cmdString=Str}} ->
+            try show_stats(unicode:characters_to_binary(Str), User, State0)
             catch _:Err:ST -> io:format("Error ~P~n ~P~n",[Err, 20, ST, 20])
             end,
             loop(State0);
@@ -162,10 +169,10 @@ text_stats(Main, MenuRounds) ->
     wxWindow:setSizer(Win, LSz),
     {Win, Text, Choice}.
 
-show_stats(Sel, Selection, User, #{stat:=Stat, diag:=Ds}) ->
-    {DD, LBs} = golf_stat:user_diagram_data(User, Selection),
+show_stats(Selection, User, #{stat:=Stat, diag:=Ds}) ->
+    {ok, {LBs, DD}} = golf_stat:user_diagram_data(User, Selection),
     [diagram:update(Diagram, LBs, Data) || {Diagram, Data} <- lists:zip(Ds, DD)],
-    StatString = golf_stat:user_stats_string(User, Selection),
+    {ok, StatString} = golf_stat:user_stats_string(User, Selection),
     wxTextCtrl:setValue(Stat, StatString).
 
 set_icon(Frame) ->
