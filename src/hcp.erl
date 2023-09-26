@@ -56,14 +56,17 @@ average(Top8, 10) -> average_1(3, Top8);
 average(Top8, 09) -> average_1(3, Top8);
 average(Top8, 08) -> average_1(2, Top8);
 average(Top8, 07) -> average_1(2, Top8);
-average(Top8, 06) -> average_1(2, Top8)-1.0;
+average(Top8, 06) -> average_1(2, 1.0, Top8);
 average(Top8, 05) -> average_1(1, Top8);
-average(Top8, 04) -> average_1(1, Top8)-1.0;
-average(Top8,  _) -> average_1(1, Top8)-2.0.
+average(Top8, 04) -> average_1(1, 1.0, Top8);
+average(Top8,  _) -> average_1(1, 2.0, Top8).
 
 average_1(N, Top8) ->
+    average_1(N, 0.0, Top8).
+
+average_1(N, Decr, Top8) ->
     {Top, _} = lists:split(N, lists:reverse(Top8)),
-    {lists:sum([score(S) || S <- Top]) / N, lists:last(Top)}.
+    {(lists:sum([score(S) || S <- Top]) / N) - Decr, lists:last(Top)}.
 
 top8(Hcp) ->
     Sorted = sort_hcp(Hcp),

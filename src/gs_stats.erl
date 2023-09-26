@@ -6,7 +6,9 @@
          read_player/1, save_player/2,
          read_courses/1, save_courses/2,
          print_stats/3,
-         diagram_data/1
+         diagram_data/1,
+
+         convert_map_from_json/1
         ]).
 
 read_player(File) ->
@@ -125,8 +127,11 @@ read_courses(Dir) ->
     end.
 
 save_courses(Courses, Dir) ->
-    Encoded = jsone:encode(Courses, [native_utf8, {space, 0}, {indent, 1}]),
-    ok = file:write_file(filename:join(Dir,"courses.json"), Encoded).
+    Prefixed = [{Name,Course} ||  #{name:=Name} = Course <- Courses],
+    Sorted = [Course || {_, Course} <- lists:sort(Prefixed)],
+    Encoded = jsone:encode(Sorted, [native_utf8, {space, 0}, {indent, 1}]),
+    ok = file:write_file(filename:join(Dir,"courses.json"), Encoded),
+    Sorted.
 
 %% Hole
 empty() ->
@@ -268,16 +273,16 @@ diagram_data(Rounds) ->
 
     F = fun(P) ->
                 case P of
-                    'medium putt'  -> "Med putt";
-                    'double bogey' -> "Double";
-                    'triple bogey' -> "Triple";
-                    'up and down'  -> "Up&Dwn";
-                    putts -> "Putts/Hole";
-                    _ -> io_lib:format("~s", [P])
+                    'medium putt'  -> <<"Med putt">>;
+                    'double bogey' -> <<"Double">>;
+                    'triple bogey' -> <<"Triple">>;
+                    'up and down'  -> <<"Up&Dwn">>;
+                    putts -> <<"Putts/Hole">>;
+                    _ -> unicode:characters_to_binary(io_lib:format("~s", [P]))
                 end
         end,
     Shots = fun({drop, #{bad:=Bad}}) ->
-                    {"drop", Bad / NoRounds};
+                    {<<"drop">>, Bad / NoRounds};
                ({Key, #{bad:=Bad,good:=Good,perfect:=Perfect}}) ->
                     Total = (Bad+Good+Perfect),
                     case Total of
@@ -286,9 +291,9 @@ diagram_data(Rounds) ->
                     end
             end,
     D1 = lists:map(Shots, ShotStats),
-    {D11,D12} = lists:splitwith(fun({K,_}) -> "pitch" =/= K end,
+    {D11,D12} = lists:splitwith(fun({K,_}) -> <<"pitch">> =/= K end,
                                 D1),
-    {D13,[Drop|D14]} = lists:splitwith(fun({K,_}) -> "drop" =/= K end,
+    {D13,[Drop|D14]} = lists:splitwith(fun({K,_}) -> <<"drop">> =/= K end,
                                        D12),
     Putting = fun() ->
                       Putts = maps:get(putts, Stat),
@@ -314,7 +319,8 @@ diagram_data(Rounds) ->
              {Type, Div} <- [{gir, NoRounds}, {'up and down', NoRounds},
                              {putts, NoHoles}, {'par save', NoRounds}]],
 
-    Scores = [{io_lib:format("Par ~w", [N]), maps:get({par,N}, Stat, 0)/maps:get({par_n,N},Stat,1)}
+    Scores = [{unicode:characters_to_binary(io_lib:format("Par ~w", [N])),
+               maps:get({par,N}, Stat, 0)/maps:get({par_n,N},Stat,1)}
               || N <- [3,4,5]],
     [D4 ++ [Drop], Scores, D11, D13, D14 ++ [PuttPercent], D2 ++ [PuttPerHole], D3].
 
@@ -499,9 +505,7 @@ compare(putts) -> fun lessthan/2;
 compare({putt, 1}) -> fun greathan/2;
 compare({putt, 2}) -> fun greathan/2;
 compare({putt, 3}) -> fun lessthan/2;
-compare({putt, n}) -> fun lessthan/2;
-compare(What) ->
-    io:format("~p: NYI compare ~p~n",[?LINE,What]).
+compare({putt, n}) -> fun lessthan/2.
 
 greathan(PA, PB) when PA >= PB ->
     [PA, [16#2197], PB];

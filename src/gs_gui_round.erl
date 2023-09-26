@@ -1,6 +1,6 @@
 -module(gs_gui_round).
 
--export([start/3, add_new_course_dialog/1]).
+-export([start/2, add_new_course_dialog/1]).
 
 -export([init/1, handle_event/2, handle_call/3, handle_cast/2, handle_info/2]).
 
@@ -14,8 +14,8 @@
 -define(DATE, 6).
 -define(DONE, 7).
 
-start(Notebook, Parent, Courses) ->
-    wx_object:start_link(?MODULE, [Notebook, Parent, Courses], []).
+start(Notebook, Parent) ->
+    wx_object:start_link(?MODULE, [Notebook, Parent], []).
 
 
 input_desc() ->
@@ -25,7 +25,7 @@ input_desc() ->
         " - Good: Normal good shots\n"
         " - Great: Shots that saves a result or are just perfect\n".
 
-init([NoteBook, Parent, Courses]) ->
+init([NoteBook, Parent]) ->
     Win = wxPanel:new(NoteBook),
     Sz = wxBoxSizer:new(?wxVERTICAL),
     wxSizer:addSpacer(Sz, 5),
@@ -33,7 +33,7 @@ init([NoteBook, Parent, Courses]) ->
     InfoCtrl = wxStaticText:new(Win, ?wxID_ANY, input_desc()),
     wxSizer:add(Sz, InfoCtrl, [{border, 20}, {flag, ?wxALL}]),
 
-    CourseNames = ["Add New Course"|[Name || #{name:=Name} <- Courses]],
+    CourseNames = ["Add New Course"|golf_stat:courses()],
     CourseChoice = wxChoice:new(Win, ?COURSE, [{size, {400,-1}}, {choices, CourseNames}]),
     wxChoice:connect(CourseChoice,command_choice_selected),
     ChSz = wxBoxSizer:new(?wxHORIZONTAL),
@@ -56,10 +56,10 @@ init([NoteBook, Parent, Courses]) ->
 
     wxWindow:connect(Win, command_button_clicked),
     wxWindow:setSizerAndFit(Win, Sz),
-    {Win, #{stat => Stat, parent => Parent, courses => Courses, frame => NoteBook, shot_order => ShotOrder,
+    {Win, #{stat => Stat, parent => Parent, frame => NoteBook, shot_order => ShotOrder,
             course => undefined, date => tuple_to_list(date()),
             pars => [], hole_cnt => 1,
-            round => #{}, total => 0, shots => []}}.
+            round => #{holes => []}, total => 0, shots => []}}.
 
 handle_event(#wx{id=?DONE, event=#wxCommand{type=command_button_clicked}}, State0) ->
     State = handle_click(?DONE, State0),
@@ -85,7 +85,7 @@ handle_event(#wx{obj=CC, event=#wxCommand{type=command_choice_selected, commandI
     {noreply, State};
 
 handle_event(#wx{event=#wxCommand{type=command_choice_selected, commandInt=Sel}}, State0) ->
-    #{name:=Name, pars:=Pars} = lists:nth(Sel, maps:get(courses, State0)),
+    {ok, #{name:=Name, pars:=Pars}} = golf_stat:course(Sel-1),
     State = State0#{course:=Name, pars:=Pars},
     write_info(State),
     {noreply, State};
@@ -150,7 +150,7 @@ handle_click(?DONE, #{total:=Total, hole_cnt:=Cnt, course:=Course, date:=Date, p
             Round = gs_stats:set_round_data(date, Date, Round1),
             Parent ! {new_round, Round},
             State#{hole_cnt=>1, hole=>gs_stats:empty(), shots => [],
-                   round=>#{}, total=>0}
+                   round => #{holes => []}, total=>0}
     end;
 handle_click(Button, #{shots:=Shots, total:=Total} = State)
   when (Button rem 10) =:= ?RESET_SHOT ->
