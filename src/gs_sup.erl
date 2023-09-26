@@ -24,6 +24,7 @@
 
 start(_StartType, StartArgs) ->
     ok = gs_rest_handler:init_cowboy(?DEFAULT_PORT),
+    io:format("Starting http://localhost:~w~n~n",[?DEFAULT_PORT]),
     %% ?DBG("START: ~p ~p~n",[_StartType, StartArgs]),
     Arg = case proplists:get_value(dir, StartArgs) of
               undefined -> #{dir => os:getenv("GS_DIR")};
