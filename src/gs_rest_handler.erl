@@ -105,7 +105,6 @@ from_text(Req, [hello]=State) ->
     {json_encode(Msg), Req, State};
 
 from_text(Req, State) ->
-    ?DBG("~p ~p~n",[Req, State]),
     Msg = <<"Hello Text Caller">>,
     {json_encode(Msg), Req, State}.
 
@@ -126,13 +125,12 @@ from_json(CS0, [user] = State) ->
         {ok, #{req := Op} = Req, CS1} ->
             handle_post_request(binary_to_atom(Op), Req, CS1, State);
         {ok, _BadReq, CS1} ->
-            ?DBG("Bad req: ~p~n", [_BadReq]),
+            ?LOG_ERROR("Bad req: ~p~n", [_BadReq]),
             post_error(<<"Bad request, no req">>, CS1, State);
         {error, Desc, CS1} ->
             post_error(Desc, CS1, State)
     end;
 from_json(CS, State) ->
-    ?DBG("~p ~n", [CS]),
     Msg = <<"Hello Json Caller">>,
     {json_encode(Msg), CS, State}.
 
@@ -167,6 +165,14 @@ handle_post_request(add_round, #{user := User, round := Round}, CS, State) ->
     case golf_stat:add_round(User, Round) of
         {ok, IdStr} ->
             post_reply(IdStr, CS, State);
+        {error, Desc} ->
+            post_error(Desc, CS, State)
+    end;
+
+handle_post_request(add_user, #{user := User}, CS, State) ->
+    case golf_stat:new_user(User) of
+        ok ->
+            post_reply(<<>>, CS, State);
         {error, Desc} ->
             post_error(Desc, CS, State)
     end;

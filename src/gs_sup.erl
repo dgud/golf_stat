@@ -23,15 +23,27 @@
 
 
 start(_StartType, StartArgs) ->
-    ok = gs_rest_handler:init_cowboy(?DEFAULT_PORT),
-    io:format("Starting http://localhost:~w~n~n",[?DEFAULT_PORT]),
     %% ?DBG("START: ~p ~p~n",[_StartType, StartArgs]),
-    Arg = case proplists:get_value(dir, StartArgs) of
-              undefined -> #{dir => os:getenv("GS_DIR")};
-              Dir -> #{dir => Dir}
-          end,
-    {ok, Pid} = supervisor:start_link({local, ?MODULE}, ?MODULE, Arg),
-    {ok, Pid}.
+    try
+        Arg = case proplists:get_value(dir, StartArgs) of
+                  undefined ->
+                      case os:getenv("GS_DIR") of
+                          false ->
+                              ?LOG_CRITICAL("No DIR found set GS_DIR environment variable~n", []),
+                              throw({error, no_dir});
+                          Dir ->
+                              #{dir => Dir}
+                      end;
+                  Dir ->
+                      #{dir => Dir}
+              end,
+        {ok, Pid} = supervisor:start_link({local, ?MODULE}, ?MODULE, Arg),
+        ok = gs_rest_handler:init_cowboy(?DEFAULT_PORT),
+        ?LOG_NOTICE("Starting: http://localhost:~w~n~n", [?DEFAULT_PORT]),
+        {ok, Pid}
+    catch Error ->
+            Error
+    end.
 
 stop(_Ref) ->
     ok = cowboy:stop_listener(my_http_listener),

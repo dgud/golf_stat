@@ -11,6 +11,8 @@
          convert_map_from_json/1
         ]).
 
+-include("golf_stat.hrl").
+
 read_player(File) ->
     read_json(File).
 
@@ -26,26 +28,16 @@ read_json(File) ->
                                     _ -> %% Old format
                                         try convert_old(maps:to_list(All))
                                         catch _:Reason:ST ->
-                                                io:format("~p: Failed: ~p ~p~n",[?LINE, Reason,ST]),
-                                                io:format(" ~p ~p~n",[maps:get(date, Round), maps:get(course, Round)]),
+                                                ?DBG("~p: Failed: ~p ~p~n",[?LINE, Reason,ST]),
+                                                ?DBG(" ~p ~p~n",[maps:get(date, Round), maps:get(course, Round)]),
                                                 exit(fail)
                                         end
                                 end
                         end,
             [ConvRound(R) || R <- Rounds];
-        {error, _} ->
-            show_error(io_lib:format("Starting new data, File not found: ~s~n", [File])),
-            []
+        {error, _} = Error ->
+            Error
     end.
-
-%% show_error(enoent, What) ->
-%%     show_error(io_lib:format("Could not find file: ~p~n",[What])).
-
-show_error(String) when is_list(String) ->
-    io:put_chars(user, String),
-    MD = wxMessageDialog:new(wx:new(), String),
-    wxMessageDialog:showModal(MD),
-    wxMessageDialog:destroy(MD).
 
 convert_map_from_json(Map) when is_map(Map) ->
     All = [{convert_key_from_json(Key), convert_val_from_json(Key, Val)} || {Key,Val} <- maps:to_list(Map)],
@@ -122,7 +114,7 @@ read_courses(Dir) ->
             Prefixed = [{Name,Course} ||  #{name:=Name} = Course <- Courses],
             [Course || {_, Course} <- lists:sort(Prefixed)];
         {error, enoent} ->
-            io:format("Could not find \"courses.json\" file~n Looking at: ~s~n",[File]),
+            ?LOG_ERROR("Could not find \"courses.json\" file~n Looking at: ~s~n",[File]),
             error({error, "courses.json not found"})
     end.
 
@@ -575,8 +567,8 @@ convert_shots([], Drop, _N, Shots) when Drop > 0 ->
     {Putts, Other} = lists:partition(fun(#{club := Club}) -> lists:member(Club, PuttKeys) end, Shots),
     lists:reverse(Putts  ++ [#{club => drop, bad => 1} || _ <- lists:seq(1,Drop)] ++ Other);
 convert_shots(What, Drop, N, Shots) ->
-    io:format("~p:~p: ~p ~p ~p ~n",[?MODULE,?LINE, N, Drop, What]),
-    io:format(" ~p ~n", [Shots]),
+    ?DBG("~p ~p ~p ~n",[?MODULE,?LINE, N, Drop, What]),
+    ?DBG(" ~p ~n", [Shots]),
     exit({nyi, What}).
 
 

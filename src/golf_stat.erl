@@ -16,7 +16,9 @@
          add_round/2,
          user_round_selection/1,
          user_diagram_data/2,
-         user_stats_string/2]).
+         user_stats_string/2,
+         new_user/1
+        ]).
 
 -export([start_link/1]).
 
@@ -60,7 +62,7 @@ add_course(#{name := Bin, pars := List}=Course)
             {error, <<"Bad course pars"/utf8>>}
     end;
 add_course(_Bad) ->
-    ?DBG("Bad course data: ~0.P~n", [_Bad, 20]),
+    ?LOG_ERROR("Bad course data: ~0.P~n", [_Bad, 20]),
     {error, <<"Bad course data"/utf8>>}.
 
 -spec user_round_selection(User :: userId()) -> {ok, [bstring()]} | err().
@@ -84,6 +86,10 @@ user_stats_string(_, _Selection) ->
 add_round(User, Round) ->
     gen_server:call(?SERVER, {add_round, to_user_atom(User), Round}).
 
+-spec new_user(User :: userId()) -> ok | err().
+new_user(User) when is_binary(User) ->
+    gen_server:call(?SERVER, {new_user, to_user_atom(User)}).
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 start_link(Args) ->
@@ -103,7 +109,7 @@ init(#{dir := Dir} = _Args) ->
                    Acc#{to_user_atom(User) => UserData}
            end,
     UserData = lists:foldl(Load, #{}, Files),
-    io:format("Loading users: ~p~n", [maps:keys(UserData)]),
+    ?LOG_INFO("Loading users: ~p~n", [maps:keys(UserData)]),
     {ok, #state{dir = Dir, courses = Cs, users = UserData}}.
 
 handle_call(courses, _From, #state{courses = Cs} = State) ->
@@ -127,7 +133,7 @@ handle_call({course, Id}, _From, #state{courses = Cs} = State) ->
                     {reply, {error, <<"Could not find course id: ", Id/binary>>}, State}
             end;
        true ->
-            ?DBG("Bad Id: ~p~n", [Id]),
+            ?LOG_ERROR("Bad Id: ~p~n", [Id]),
             {reply, {error, <<"Bad course string">>}, State}
     end;
 
@@ -196,6 +202,21 @@ handle_call({add_round, User, Round0}, _From, #state{users = Users, courses = Cs
                 Error ->
                     {reply, Error, State}
             end
+    end;
+
+handle_call({new_user, User}, _From, #state{dir = Dir, users = Users} = State) ->
+    case maps:get(User, Users, undefined) of
+        undefined ->
+            File = filename:join(Dir, atom_to_list(User) ++ "_stat.json"),
+            ok = gs_stats:save_player(File, []),
+            UserData = #{
+                         file   => File,
+                         rounds => gs_stats:read_player(File)
+                        },
+            {reply, ok, State#state{users = Users#{User => UserData}}};
+        _UserData ->
+            Res = {error, <<"User already exists: ", (atom_to_binary(User))/binary >>},
+            {reply, Res, State}
     end;
 
 handle_call(_Request, _From, State) ->
@@ -280,7 +301,7 @@ split_round_data(String, All) ->
                     [Course|_] = string:split(Course1, "golf"),
                     {string:trim(Course), [Round], Rest};
                 false ->
-                    io:format("Round ~ts not found ~p ~n", [String, id_to_name_and_date(String)]),
+                    ?LOG_ERROR("Round ~ts not found ~p ~n", [String, id_to_name_and_date(String)]),
                     not_found
             end;
         {_, true} ->
@@ -385,7 +406,6 @@ verify_new_round(#{course:=Course0, date:=Date0} = Orig, Cs) ->
             true ->
                 #{holes := Hs} = New = gs_stats:convert_map_from_json(Orig),
                 {value, _} = lists:search(fun(#{name := Name}) -> Name == Course0 end, Cs),
-                true = is_list(Hs),
                 case lists:foldl(fun verify_new_hole/2, ok, Hs) of
                     {error, _} = Err -> Err;
                     ok -> {ok, New}
@@ -394,11 +414,11 @@ verify_new_round(#{course:=Course0, date:=Date0} = Orig, Cs) ->
                 {ok, Orig}
         end
     catch _:_Err:_St ->
-            ?DBG("Bad round: ~P~n ~P~n ~P~n",[Orig, 20, _Err, 20, _St, 20]),
+            ?LOG_ERROR("Bad round: ~0.P~n ~0.P~n ~0.P~n",[Orig, 20, _Err, 20, _St, 20]),
             {error, <<"Bad round data">>}
     end;
 verify_new_round(_Orig, _) ->
-    ?DBG("Bad round: ~P~n",[_Orig, 20]),
+    ?LOG_ERROR("Bad round: ~0.P~n",[_Orig, 20]),
     {error, <<"Bad round data">>}.
 
 verify_new_hole(#{no := N, par := Par, shots := Shots}, Err) ->
@@ -408,11 +428,11 @@ verify_new_hole(#{no := N, par := Par, shots := Shots}, Err) ->
         true = lists:all(fun(S) -> verify_shot(lists:sort(maps:to_list(S))) end, Shots),
         Err
     catch _:_Err:_St ->
-            ?DBG("Bad hole: ~p ~p~n",[N, Par]),
+            ?LOG_ERROR("Bad hole: ~p ~p~n",[N, Par]),
             {error, unicode:characters_to_binary(io_lib:format("Bad hole data: ~w", [N]))}
     end;
 verify_new_hole(_Hole, _Err) ->
-    ?DBG("Bad hole ~p~n",[_Hole]),
+    ?LOG_ERROR("Bad hole ~p~n",[_Hole]),
     {error, <<"Bad hole data">>}.
 
 verify_shot([{bad, 1}, {club, Club}]) ->
@@ -422,5 +442,5 @@ verify_shot([{club, Club}, {good, 1}]) ->
 verify_shot([{club, Club}, {perfect, 1}]) ->
     lists:member(Club, gs_stats:keys());
 verify_shot(_Bad) ->
-    ?DBG("Bad shot ~p~n",[_Bad]),
+    ?LOG_ERROR("Bad shot ~p~n",[_Bad]),
     false.
