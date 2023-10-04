@@ -198,7 +198,7 @@ update_shots(#{shots:=Shots}) ->
 
 shot_order_string(Shots) ->
     [io_lib:format("~.2w: ~12s  ~s~n", [No, Club, verdict(Shot)]) ||
-        {No, #{club := Club} = Shot} <- lists:enumerate(lists:reverse(Shots))].
+        {No, #{club := Club} = Shot} <- gs_lib:enumerate(lists:reverse(Shots))].
 
 verdict(#{bad := _}) -> bad;
 verdict(#{good := _}) -> good;

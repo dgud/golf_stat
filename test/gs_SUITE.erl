@@ -78,6 +78,8 @@ fetch_courses(_Config) ->
     FooBar = base64:encode_to_string(<<"foobar"/utf8>>),
     {error, <<"Could not find", _/binary>>} = get_request("course/" ++ FooBar),
 
+    [{ok, _} = get_request("course/" ++ base64:encode_to_string(Course)) || Course <- List],
+
     ok = application:stop(golf_stat),
     ok.
 
@@ -269,7 +271,7 @@ user_round_trip(_Config) ->
     ct:log("Hmm: ~p~n", [Menus0]),
     Menu0 = lists:nth(2, Menus0),
     {ok, <<"No stats available">>} = post("user", #{req => <<"stats_string">>, user => User, selection => Menu0}),
-    {ok, #{labels := [], diagrams := [[#{data := [0.0], label := <<"gir">>}|_], _, _, _, _, _, _]}} =
+    {ok, #{labels := [], diagrams := [[#{data := [+0.0], label := <<"gir">>}|_], _, _, _, _, _, _]}} =
         post("user", #{req => <<"stats_diagram">>, user => User, selection => Menu0}),
 
     Round = #{date => <<"2023-12-24T10:00:00Z">>,
