@@ -74,7 +74,7 @@ draw(DC, #{win:=Win, font:=[_Font0,Font1]=Fonts, brushes:=Brushes, labels:=Label
     YM = H - 50.0,
     XM = W - 10.0,
 
-    wxGraphicsContext:drawLines(Canvas, [{X0,Y0-5.0}, {X0, YM}, {XM, YM}]),
+    wxGraphicsContext:drawLines(Canvas, [{X0,Y0-5.0}, {X0, YM}, {XM, YM}, {XM, Y0-5.0}]),
 
     Max0 = lists:foldl(fun(#{data:= Vs}, Max) -> max(Max, lists:max(Vs)) end, 0.0, Data),
     Marks = if Max0 > 100 -> lists:seq(0, 200, 50);
