@@ -35,7 +35,10 @@ start_halt(File) ->
 -spec start(string(), boolean()) -> no_return().
 start(File, Stop) ->
     Dir = filename:dirname(File),
-    {ok, _} = golf_stat:start_link(#{dir => Dir}),
+    case golf_stat:start_link(#{dir => Dir}) of
+        {ok, _} -> ok;
+        {error, {already_started, _}} -> ok
+    end,
     [User|_] = string:split(filename:basename(File), "_stat.json"),
     gui(User),
     quit(Stop),
