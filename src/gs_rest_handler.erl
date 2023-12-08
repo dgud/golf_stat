@@ -20,6 +20,7 @@
 %% REST Callbacks
 -export([init/2]).
 -export([allowed_methods/2]).
+-export([charsets_provided/2]).
 -export([content_types_provided/2]).
 -export([content_types_accepted/2]).
 -export([resource_exists/2]).
@@ -46,30 +47,38 @@ init_cowboy(Port) ->
     {ok, _} = cowboy:start_clear(my_http_listener,
                                  [{port, Port}],
                                  #{env => #{dispatch => Dispatch},
-                                   middlewares => [cowboy_router, cowboy_handler]
+                                   middlewares => [gs_cowboy_middleware, cowboy_router, cowboy_handler]
                                   }),
     ok.
 
 %% Cowboy REST callbacks
 init(Req, State) ->
+    %%?LOG_NOTICE("~p:~p REQ ~p~n",[?MODULE, ?LINE, Req]),
     {cowboy_rest, Req, State}.
 
 allowed_methods(Req, State) ->
-    {[<<"GET">>, <<"POST">>], Req, State}.
+    %%?LOG_NOTICE("~p:~p REQ ~p~n",[?MODULE, ?LINE, Req]),
+    {[<<"GET">>, <<"POST">>, <<"OPTIONS">>], Req, State}.
+
+charsets_provided(Req, State) ->
+    {[<<"utf-8">>], Req, State}.
 
 content_types_provided(Req, State) ->
+    %%?LOG_NOTICE("~p:~p REQ ~p~n",[?MODULE, ?LINE, Req]),
     {[
       {<<"text/plain">>, from_text},
       {<<"text/html">>, from_text},
-      {{<<"application">>, <<"json">>, []}, from_json}
+      {{<<"application">>, <<"json">>, '*'}, from_json}
      ], Req, State}.
 
 content_types_accepted(Req, State) ->
+    %%?LOG_NOTICE("~p:~p REQ ~p~n",[?MODULE, ?LINE, Req]),
     {[
-      {<<"application/json">>, from_json}
+      {{<<"application">>, <<"json">>, '*'}, from_json}
      ], Req, State}.
 
 resource_exists(Req, State) ->
+    %%?LOG_NOTICE("~p:~p REQ ~p~n",[?MODULE, ?LINE, Req]),
     case cowboy_req:method(Req) of
         <<"GET">> -> {true, Req, State};
         <<"POST">> -> {false, Req, State}
@@ -77,9 +86,10 @@ resource_exists(Req, State) ->
 
 from_text(Req, [courses] = State) ->
     Courses = golf_stat:courses(),
-    {json_encode(Courses), Req, State};
+    get_reply(Courses, Req, State);
 
 from_text(Req, [course] = State) ->
+    %%?LOG_NOTICE("~p:~p REQ ~p~n",[?MODULE, ?LINE, Req]),
     IdStr = cowboy_req:binding(courseId, Req),
     try
         Id = case string:to_integer(IdStr) of
@@ -88,7 +98,7 @@ from_text(Req, [course] = State) ->
              end,
         case golf_stat:course(Id) of
             {ok, Course} ->
-                {json_encode(Course), Req, State};
+                get_reply(Course, Req, State);
             {error, ErrString} ->
                 get_error(ErrString, Req, State)
         end
@@ -102,13 +112,14 @@ from_text(Req, [course] = State) ->
 from_text(Req, [hello]=State) ->
     %% ?DBG("~p ~p~n",[Req, State]),
     Msg = <<"Hello Text Caller">>,
-    {json_encode(Msg), Req, State};
+    get_reply(Msg, Req, State);
 
 from_text(Req, State) ->
-    Msg = <<"Hello Text Caller">>,
-    {json_encode(Msg), Req, State}.
+    Msg = <<"Hello Text Caller2">>,
+    get_reply(Msg, Req, State).
 
 from_json(Req0, [add_course] = State) ->
+    %%?LOG_NOTICE("~p:~p REQ ~p~n",[?MODULE, ?LINE, Req0]),
     case get_json_body(Req0) of
         {ok, Json, Req1} ->
             case golf_stat:add_course(Json) of
@@ -121,6 +132,7 @@ from_json(Req0, [add_course] = State) ->
             post_error(Desc, Req1, State)
     end;
 from_json(CS0, [user] = State) ->
+    %%?LOG_NOTICE("~p:~p REQ ~p~n",[?MODULE, ?LINE, CS0]),
     case get_json_body(CS0) of
         {ok, #{req := Op} = Req, CS1} ->
             handle_post_request(binary_to_atom(Op), Req, CS1, State);
@@ -131,8 +143,9 @@ from_json(CS0, [user] = State) ->
             post_error(Desc, CS1, State)
     end;
 from_json(CS, State) ->
+    %%?LOG_NOTICE("~p:~p REQ ~p~n",[?MODULE, ?LINE, CS]),
     Msg = <<"Hello Json Caller">>,
-    {json_encode(Msg), CS, State}.
+    post_reply(Msg, CS, State).
 
 %%%
 
@@ -183,18 +196,20 @@ handle_post_request(Req, _User, CS, State) ->
 %%%
 
 post_reply(Msg, Req0, State) ->
-    Req1 = cowboy_req:set_resp_header(<<"content-type">>, <<"application/json">>, Req0),
-    Req = cowboy_req:set_resp_body(json_encode(Msg), Req1),
+    Req = cowboy_req:set_resp_body(json_encode(Msg), Req0),
+    %% ?LOG_NOTICE("~p:~p ~p~n",[?MODULE, ?LINE, Req]),
     {true, Req, State}.
 
 post_error(Error, Req0, State) when is_binary(Error) ->
-    %% Req1 = cowboy_req:set_resp_header(#{<<"content-type">> => <<"application/json">>}, Req0),
     Req = cowboy_req:set_resp_body(Error, Req0),
+    %% ?LOG_NOTICE("~p:~p ~p~n",[?MODULE, ?LINE, Req]),
     {false, Req, State}.
 
-get_error(Error, Req, State) when is_binary(Error) ->
-    %% Header = #{<<"content-type">> => <<"application/json">>}
-    {stop, cowboy_req:reply(400, #{}, Error, Req), State}.
+get_reply(Msg, Req0, State) ->
+    {json_encode(Msg), Req0, State}.
+
+get_error(Error, Req0, State) when is_binary(Error) ->
+    {stop, cowboy_req:reply(400, #{}, Error, Req0), State}.
 
 get_json_body(Req0) ->
     %% Should we use cowboy_req:read_urlencoded_binary/1

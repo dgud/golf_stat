@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html>
+<body>
+
+<h2>Test Golf stat</h2>
+
+<pre id="hello">Is server alive.</pre>
+<button type="button" onclick="hello()">Check alive</button>
+
+
+<pre id="courses">No course.</pre>
+<button type="button" onclick="fetchCourses()">Fetch Courses</button>
+
+<pre id="course">No course.</pre>
+<button type="button" onclick="fetchCourse(3)">Fetch Course number 3</button>
+
+<pre id="userSel">No user</pre>
+<button type="button" onclick="fetchUserSel()">Fetch test1 user selections</button>
+
+<pre id="userStatsString">No user</pre>
+<button type="button" onclick="fetchUserStatsString()">Fetch testN user text stats</button>
+
+<pre id="userStatsDiag">No user</pre>
+<button type="button" onclick="fetchUserStatsDiag()">Fetch testN user diagram stats</button>
+
+<script>
+
+  const apiUrl = "http://localhost:21137/";
+
+  function hello() {
+      fetchData(apiUrl).then(
+          function(value) {document.getElementById("hello").innerHTML = value;}
+      );
+  }
+
+  function fetchCourses() {
+      fetchData(apiUrl + "courses").then(
+          function(value) {document.getElementById("courses").innerHTML = value;}
+      );
+  }
+
+  function fetchCourse(nr) {
+      fetchData(apiUrl + "course/" + (nr - 1)).then(
+          function(value) {document.getElementById("course").innerHTML = JSON.stringify(value, null, 2);}
+      );
+  }
+
+  function fetchUserSel() {
+      Json = { 'req' : "selections",
+               'user' : "test1"
+             };
+      fetchDataJson(apiUrl + "user", Json).then(
+          function(value) {document.getElementById("userSel").innerHTML = JSON.stringify(value, null, 2);}
+      );
+  }
+
+  function fetchUserStatsString() {
+      Json = { 'req' : "stats_string",
+               'user' : "testN",
+               'selection' : "All Rounds"
+             };
+      fetchDataJson(apiUrl + "user", Json).then(
+          function(value) {document.getElementById("userStatsString").innerHTML = JSON.stringify(value, null, 2);}
+      );
+  }
+
+  function fetchUserStatsDiag() {
+      Json = { 'req' : "stats_diagram",
+               'user' : "testN",
+               'selection' : "2022"
+             };
+      fetchDataJson(apiUrl + "user", Json).then(
+          function(value) {document.getElementById("userStatsDiag").innerHTML = JSON.stringify(value, null, 2);}
+      );
+  }
+
+  async function fetchData(url) {
+      try {
+          const response = await fetch(url);
+          if (response.ok) {
+              const data = await response.json();
+              console.log("Fetched data:", data);
+              return data;
+          } else {
+              throw new Error(`Error! status: ${response.status} ${response.message}`);
+          }
+      } catch (error) {
+          console.error("Fetch fail:", error);
+      }
+  }
+
+
+  async function fetchDataJson(url, Data) {
+      try {
+          Body = JSON.stringify(Data);
+          JsonHeader = { 'Content-type': 'application/json; charset=UTF-8' };
+          const response = await fetch(url, { 'method': 'POST', 'body': Body, 'headers': JsonHeader });
+          if (response.ok) {
+              const data = await response.json();
+              console.log("Fetched data:", data);
+              return data;
+          } else {
+              throw new Error(`Error! status: ${response.status} ${response.text}`);
+          }
+      } catch (error) {
+          console.error("Fetch fail:", error);
+      }
+  }
+
+
+</script>
+
+</body>
+</html>

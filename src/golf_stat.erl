@@ -311,7 +311,7 @@ split_round_data(String, All) ->
 
 diagram_data(Desc, Rounds, Other) ->
     {DiDa,LBs} = split_rounds(Desc, Rounds, Other, Other =/= [] andalso length(Rounds) =/= 1),
-    {diagram_data(DiDa), LBs}.
+    {diagram_data(DiDa), [unicode:characters_to_binary(Label) || Label <- LBs]}.
 
 split_rounds(_String, Rounds, [], _) ->
     split_rounds(Rounds, false);
