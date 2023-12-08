@@ -23,6 +23,9 @@
 <pre id="userStatsDiag">No user</pre>
 <button type="button" onclick="fetchUserStatsDiag()">Fetch testN user diagram stats</button>
 
+<pre id="userStatsError">No user</pre>
+<button type="button" onclick="fetchUserStatsError()">Fetch error</button>
+
 <script>
 
   const apiUrl = "http://localhost:21137/";
@@ -74,21 +77,32 @@
       );
   }
 
+  function fetchUserStatsError() {
+      Json = { 'req' : "stats_diagram",
+               'user' : "nobody",
+               'selection' : "2022"
+             };
+      fetchDataJson(apiUrl + "user", Json).then(
+          function(value) {document.getElementById("userStatsError").innerHTML = value;}
+      );
+  }
+
   async function fetchData(url) {
       try {
           const response = await fetch(url);
           if (response.ok) {
               const data = await response.json();
               console.log("Fetched data:", data);
-              return data;
+              return data;w
           } else {
-              throw new Error(`Error! status: ${response.status} ${response.message}`);
+              const data = await response.json();
+              console.log("Error description:", data);
+              return data;
           }
       } catch (error) {
           console.error("Fetch fail:", error);
       }
   }
-
 
   async function fetchDataJson(url, Data) {
       try {
@@ -100,7 +114,9 @@
               console.log("Fetched data:", data);
               return data;
           } else {
-              throw new Error(`Error! status: ${response.status} ${response.text}`);
+              const data = await response.text();
+              console.log("Error description:", data);
+              return data;
           }
       } catch (error) {
           console.error("Fetch fail:", error);
