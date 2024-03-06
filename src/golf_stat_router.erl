@@ -25,7 +25,8 @@ routes(_Environment) ->
             {"/", {golf_stat_main_controller, index}, #{methods => [post]}},
             {"/courses", {golf_stat_main_controller, courses_view}, #{methods => [get]}},
             {"/course/:courseId", {golf_stat_main_controller, course_view}, #{methods => [get]}},
-            {"/add_course/", {golf_stat_main_controller, add_course_view}, #{methods => [get]}},
+            {"/add_course", {golf_stat_main_controller, add_course_view}, #{methods => [get]}},
+            {"/add_round", {golf_stat_main_controller, add_user_round_view}, #{methods => [get]}},
             {"/assets/[...]", "assets"}
            ]
       },

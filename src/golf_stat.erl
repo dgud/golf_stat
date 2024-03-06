@@ -69,7 +69,7 @@ add_course(_Bad) ->
 user_round_selection(User) ->
     gen_server:call(?SERVER, {user_round_selection, to_user_atom(User)}).
 
--spec user_diagram_data(User :: userId(), Sel::bstring()) -> {ok, {term(), [bstring()]}} | err().
+-spec user_diagram_data(User :: userId(), Sel::bstring()) -> {ok, {[bstring()], term()}} | err().
 user_diagram_data(User, Selection) when is_binary(Selection) ->
     gen_server:call(?SERVER, {user_diagram_data, to_user_atom(User), Selection});
 user_diagram_data(_, _Selection) ->
@@ -105,6 +105,10 @@ init(#{dir := Dir} = _Args) ->
     gs_auth:init(),
     Cs = gs_stats:read_courses(Dir),
     Files = filelib:wildcard(filename:join(Dir, "*_stat.json")),
+    case application:get_env(nova, dev_mode) of
+        {ok, true} -> reloader:start(); %% Start code reloader
+        _ -> ignore
+    end,
     Load = fun(File, Acc) ->
                    [User|_] = string:split(filename:basename(File), "_stat.json"),
                    UserData = #{
@@ -270,7 +274,9 @@ format_status(_Opt, Status) ->
 
 to_user_atom(User) when not is_atom(User) ->
     IgnoreCase = string:casefold(User),
-    binary_to_atom(unicode:characters_to_binary(IgnoreCase)).
+    binary_to_atom(unicode:characters_to_binary(IgnoreCase));
+to_user_atom(User) when is_atom(User) ->
+    User.
 
 round_id(#{course:=Name, date:=[Y,M,D]}) ->
     unicode:characters_to_binary(io_lib:format("~ts ~w-~2..0w-~2..0w", [Name,Y,M,D])).

@@ -1,0 +1,370 @@
+<html>
+  <head>
+        <title>Add a new round:</title>
+  </head>
+  <body>
+    <p>
+      Input shots in order from tee to hole.
+    </p>
+    <p>
+      Categorizing shots is personal but I user the following:<br>
+      <ul>
+      <li>Bad:  Shots that causes a drop or a bogey on the hole </li>
+      <li>Ok:   Normal good shots</li>
+      <li>Great: Shots that saves a result or are just perfect</li>
+      </ul>
+    </p>
+
+    <p>
+      <form id="course_selection">
+        <label for="course"> Select course:</label>
+        <select id="course" name="course" onclick='reg_course()'>
+          {% for course in courses %}
+          <option value={{ course.1 }} > {{course.2}} </option>
+          {% endfor %}
+        </select>
+        <br>
+        <label for="date"> Select Date:</label>
+        <input type="date" id="date" name="date">
+      </form>
+    </p>
+
+    <p>
+      Hole: <span id="hole_nr">0</span> Par: <span id="hole_par">0</span>
+      Shots: <span id="hole_shots">0</span> Total: <span id="total_nr">0</span>
+      (par <span id="total_par">0</span>)
+    </p>
+
+    <p>
+      Order: <span id=shot_order>None</span>
+    </p>
+
+    <table>
+      <tr>
+        <td>Drive</td>
+        <td><span id="drive_nr">0</span></td>
+        <td><button type=button onclick="reg_shot('drive', 'bad')"> Bad </button></td>
+        <td><button type=button onclick="reg_shot('drive', 'ok')"> Ok </button></td>
+        <td><button type=button onclick="reg_shot('drive', 'great')"> Great </button></td>
+        <td>Driver shots</td>
+      </tr>
+      <tr>
+        <td>Wood</td>
+        <td><span id="wood_nr">0</span></td>
+        <td><button type=button onclick="reg_shot('woods', 'bad')"> Bad </button></td>
+        <td><button type=button onclick="reg_shot('woods', 'ok')"> Ok </button></td>
+        <td><button type=button onclick="reg_shot('woods', 'great')"> Great </button></td>
+        <td>All other woods</td>
+      </tr>
+      <tr>
+        <td>Iron</td>
+        <td><span id="iron_nr">0</span></td>
+        <td><button type=button onclick="reg_shot('iron', 'bad')"> Bad </button></td>
+        <td><button type=button onclick="reg_shot('iron', 'ok')"> Ok </button></td>
+        <td><button type=button onclick="reg_shot('iron', 'great')"> Great </button></td>
+        <td>Iron clubs 3-9 shots</td>
+      </tr>
+      <tr>
+        <td>Wedge</td>
+        <td><span id="wedge_nr">0</span></td>
+        <td><button type=button onclick="reg_shot('wedge', 'bad')"> Bad </button></td>
+        <td><button type=button onclick="reg_shot('wedge', 'ok')"> Ok </button></td>
+        <td><button type=button onclick="reg_shot('wedge', 'great')"> Great </button></td>
+        <td>Full wedge shots</td>
+      </tr>
+      <tr>
+        <td>Pitch</td>
+        <td><span id="pitch_nr">0</span></td>
+        <td><button type=button onclick="reg_shot('pitch', 'bad')"> Bad </button></td>
+        <td><button type=button onclick="reg_shot('pitch', 'ok')"> Ok </button></td>
+        <td><button type=button onclick="reg_shot('pitch', 'great')"> Great </button></td>
+        <td>20-60m pitches</td>
+      </tr>
+      <tr>
+        <td>Bunker</td>
+        <td><span id="bunker_nr">0</span></td>
+        <td><button type=button onclick="reg_shot('bunker', 'bad')"> Bad </button></td>
+        <td><button type=button onclick="reg_shot('bunker', 'ok')"> Ok </button></td>
+        <td><button type=button onclick="reg_shot('bunker', 'great')"> Great </button></td>
+        <td>Bunker shots close green</td>
+      </tr>
+      <tr>
+        <td>Chip</td>
+        <td><span id="chip_nr">0</span></td>
+        <td><button type=button onclick="reg_shot('chip', 'bad')"> Bad </button></td>
+        <td><button type=button onclick="reg_shot('chip', 'ok')"> Ok </button></td>
+        <td><button type=button onclick="reg_shot('chip', 'great')"> Great </button></td>
+        <td>Chips close to green</td>
+      </tr>
+      <tr>
+        <td>Drop</td>
+        <td><span id="drop_nr">0</span></td>
+        <td><button type=button onclick="reg_shot('drop', 'bad')"> Drop </button></td>
+        <td></td>
+        <td></td>
+        <td>Penalty shot</td>
+      </tr>
+      <tr>
+        <td>Long Putt</td>
+        <td><span id="l_putt_nr">0</span></td>
+        <td><button type=button onclick="reg_shot('long putt', 'bad')"> Bad </button></td>
+        <td><button type=button onclick="reg_shot('long putt', 'ok')"> Ok </button></td>
+        <td><button type=button onclick="reg_shot('long putt', 'great')"> Great </button></td>
+        <td>Longer than 3m putts</td>
+      </tr>
+      <tr>
+        <td>Medium</td>
+        <td><span id="m_putt_nr">0</span></td>
+        <td><button type=button onclick="reg_shot('medium putt', 'bad')"> Bad </button></td>
+        <td><button type=button onclick="reg_shot('medium putt', 'ok')"> Ok </button></td>
+        <td><button type=button onclick="reg_shot('medium putt', 'great')"> Great </button></td>
+        <td>Putt 1-3m long</td>
+      </tr>
+      <tr>
+        <td>Short Putt</td>
+        <td><span id="s_putt_nr">0</span></td>
+        <td><button type=button onclick="reg_shot('short putt', 'bad')"> Bad </button></td>
+        <td><button type=button onclick="reg_shot('short putt', 'ok')"> Ok </button></td>
+        <td><button type=button onclick="reg_shot('short putt', 'great')"> Great </button></td>
+        <td>Shorter putts, less than 1m</td>
+      </tr>
+    </table>
+
+    <form>
+      <input type="button", value="Previous Hole" onclick="change_hole(-1)">
+      <input type="button", value="Next Hole" onclick="change_hole(1)">
+      <input type="button" value="Reset Hole" onclick="reset_hole()">
+      <br>
+      <input type="button" value="Save Round" onclick="sendForm()" >
+    </form>
+
+    <script>
+      let course_nr = -1;
+      let course_pars = [];
+      let course = "";
+      let hole_nr = 0;
+      let hole_par = 0;
+      let hole_shots_nr = 0;
+      let hole_shots = [];
+
+      let total_nr = 0;
+      let total_par = 0;
+      let drive_nr = 0, wood_nr = 0, iron_nr = 0, wedge_nr = 0;
+      let pitch_nr = 0, bunker_nr = 0, chip_nr = 0, drop_nr = 0;
+      let l_putt_nr = 0, m_putt_nr = 0, s_putt_nr = 0;
+      let holes = [];
+
+      // set up todays date as default
+      const today = new Date().toISOString().slice(0, 10);
+      document.getElementById("date").value = today;
+
+      function change_hole(Incr) {
+          let old_hole = hole_nr;
+          hole_nr += Incr;
+          if(hole_nr < 1 || hole_nr > 18) {
+              hole_nr = old_hole;
+              return;
+          }
+          save_hole(old_hole);
+          zero_hole();
+          hole_par = course_pars[hole_nr-1];
+          total_par = hole_par;
+
+          for (const h of holes) {
+              if(h) {
+                  if( h.no == hole_nr) {
+                      load_hole_shots(h.shots);
+                  } else {
+                      total_par += h.par;
+                  }
+              }
+          }
+          update_data();
+      }
+
+      function load_hole_shots(shots) {
+          hole_shots = shots;
+          hole_shots_nr = 0;
+          for (const s of shots) {
+              hole_shots_nr++;
+              count_shot_type(s.club);
+          }
+      }
+
+      function zero_hole() {
+          hole_shots_nr = 0;
+          drive_nr = 0, wood_nr = 0, iron_nr = 0, wedge_nr = 0;
+          pitch_nr = 0, bunker_nr = 0, chip_nr = 0, drop_nr = 0;
+          l_putt_nr = 0, m_putt_nr = 0, s_putt_nr = 0;
+          hole_shots = [];
+      }
+
+      function reset_hole() {
+          total_nr -= hole_shots_nr;
+          holes[hole_nr] = null;
+          zero_hole();
+          update_data();
+      }
+
+      function save_hole(hole) {
+          if (hole_shots_nr > 0) {
+              let save_hole = {no: hole, par: hole_par, shots: hole_shots};
+              holes[hole] = save_hole;
+          }
+      }
+
+      function reg_course() {
+          var c_el = document.getElementById('course');
+          console.log("Selected course ", c_el.value, " ", c_el.selectedOptions[0].text);
+          fetchData("api/json/course/" + c_el.value).then(
+              function(value) {
+                  course_nr = Number(c_el.value);
+                  course = value.name;
+                  course_pars = value.pars;
+                  zero_hole();
+                  holes = [];
+                  hole_nr=0;
+                  change_hole(1);
+                  total_nr = 0;
+                  update_data();
+              }
+          )
+      }
+
+      function update_data() {
+          document.getElementById('hole_nr').innerHTML=hole_nr;
+          document.getElementById('hole_par').innerHTML=hole_par;
+          document.getElementById('hole_shots').innerHTML=hole_shots_nr;
+          document.getElementById('total_nr').innerHTML=total_nr;
+          document.getElementById('total_par').innerHTML=total_par;
+
+          document.getElementById('drive_nr').innerHTML=drive_nr;
+          document.getElementById('wood_nr').innerHTML=wood_nr;
+          document.getElementById('iron_nr').innerHTML=iron_nr;
+          document.getElementById('wedge_nr').innerHTML=wedge_nr;
+          document.getElementById('pitch_nr').innerHTML=pitch_nr;
+          document.getElementById('bunker_nr').innerHTML=bunker_nr;
+
+          document.getElementById('chip_nr').innerHTML=chip_nr;
+          document.getElementById('drop_nr').innerHTML=drop_nr;
+          document.getElementById('l_putt_nr').innerHTML=l_putt_nr;
+          document.getElementById('m_putt_nr').innerHTML=m_putt_nr;
+          document.getElementById('s_putt_nr').innerHTML=s_putt_nr;
+
+          shots_str = "";
+          for (const sh of hole_shots) {
+              shots_str = shots_str + " " + sh.club;
+          }
+          document.getElementById('shot_order').innerHTML = shots_str;
+      }
+
+      function reg_shot(Type, Res) {
+          if ( course_nr < 0) {
+              alert("Select course first");
+              return;
+          }
+          switch(Res) {
+          case 'bad':
+              hole_shots.push({bad:1, club:Type});
+              break;
+          case 'ok':
+              hole_shots.push({good:1, club:Type});
+              break;
+          case 'great':
+              hole_shots.push({perfect:1, club:Type});
+              break;
+          default:
+              console.log("Unknown shot type", Res);
+          };
+
+          count_shot_type(Type);
+
+          hole_shots_nr++;
+          total_nr++;
+          update_data();
+      }
+
+      function count_shot_type(Type) {
+          switch(Type) {
+          case 'drive':
+              drive_nr++;  break;
+          case 'woods':
+              wood_nr++; break;
+          case 'iron':
+              iron_nr++;  break;
+          case 'wedge':
+              wedge_nr++; break;
+          case 'pitch':
+              pitch_nr++;  break;
+          case 'bunker':
+              bunker_nr++; break;
+          case 'chip':
+              chip_nr++;  break;
+          case 'drop':
+              drop_nr++; break;
+          case 'long putt':
+              l_putt_nr++; break;
+          case 'medium putt':
+              m_putt_nr++; break;
+          case 'short putt':
+              s_putt_nr++; break;
+          default:
+              console.log("Unknown club", Type);
+              return;
+          }
+      }
+
+      function sendForm() {
+          var date = document.getElementById('date').value;
+
+          save_hole(hole_nr);
+          added_holes = [];
+
+          for (const h of holes) {
+              if(h) {
+                  added_holes.push(h);
+              }
+          }
+          var json = {course: course,
+                      date: date,
+                      holes: added_holes
+                     };
+          // console.log("325: Store:", json);
+          sendData(json)
+      }
+
+      async function sendData(jsonObject) {
+          try {
+              const response = await fetch("api/json/user/add_round" , {
+                  method: "POST",
+                  headers: {
+                      "Content-Type": "application/json"
+                  },
+                  body: JSON.stringify(jsonObject)
+              });
+              console.log(await response.json());
+          } catch (e) {
+              console.error(e);
+          }
+      }
+
+      async function fetchData(url) {
+          try {
+              const response = await fetch(url);
+              if (response.ok) {
+                  const data = await response.json();
+                  console.log("Fetched data:", data);
+                  return data;
+              } else {
+                  const data = await response.json();
+                  console.log("Error description:", data);
+                  return data;
+              }
+          } catch (error) {
+              console.error("Fetch fail:", error);
+          }
+      }
+
+    </script>
+  </body>
+</html>
