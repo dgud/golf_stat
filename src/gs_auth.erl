@@ -19,8 +19,13 @@ fetch_user(#{headers := Headers}) ->
     case maps:get(<<"cookie">>, Headers, undefined) of
         <<"session_id=", Session/binary>> ->
             case ets:lookup(?STORE, Session) of
-                [{_, UserName}] -> UserName;
-                _ -> undefined
+                [{_, UserName}] ->
+                    ?DBG("User: ~s id: ~s~n", [UserName, Session]),
+                    UserName;
+                _ ->
+                    ?DBG("Fail: ~s~n", [Session]),
+                    [io:format("  ~p~n", [Entry]) || Entry <- ets:tab2list(?STORE)],
+                    undefined
             end;
         _ ->
             ?DBG("No cookie: ~p~n",[Headers]),

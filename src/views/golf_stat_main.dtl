@@ -39,7 +39,8 @@
        </span>
 
       {% if auth %}
-      <a href='courses'> Courses </a>
+      <a href='add_round'> Add Round </a>
+      <a href='courses'> View Courses </a>
       {% else %}
       <a href='login'> LOGIN </a>
       {% endif %}

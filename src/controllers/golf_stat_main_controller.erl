@@ -6,6 +6,7 @@
          courses_view/1,
          course_view/1,
          add_course_view/1,
+         add_user_round_view/1,
 
          %% Json api
          get_courses/1,
@@ -35,18 +36,23 @@ login_view(_Req) ->
     %% ?DBG(" ~P~n",[_Req,20]),
     {ok, [], #{view => login}}.
 
-courses_view(_Req) -> %% #{auth_data := #{auth := true}}
+courses_view(#{auth_data := #{auth := true}}) ->
     Cs = gs_lib:enumerate(0, [unicode:characters_to_list(C) || C <- golf_stat:courses()]),
     {ok, [{courses, Cs}], #{view => courses}}.
 
 course_view(#{bindings := #{<<"courseId">> := IdStr}}) ->
     reply(golf_stat:course(to_integer(IdStr))).
 
-add_course_view(auth_data := #{auth := true}) ->
-    {ok,
-     [{hostpath, "http:/localhost:8080/api/json/add_course"}],
-     #{view => add_course}};
+add_course_view(#{auth_data := #{auth := true}}) ->
+    {ok, [], #{view => add_course}};
 add_course_view(_) ->
+    {status, 401}.
+
+add_user_round_view(#{auth_data := #{auth := true}}) ->
+    Courses = golf_stat:courses(),
+    SelStrings = gs_lib:enumerate(0, [unicode:characters_to_list(C) || C <- Courses]),
+    {ok, [{courses, SelStrings}], #{view => add_user_round}};
+add_user_round_view(_) ->
     {status, 401}.
 
 
