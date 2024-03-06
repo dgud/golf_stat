@@ -1,16 +1,19 @@
+%% -*- mode: erlang;erlang-indent-level: 4;indent-tabs-mode: nil -*-
 {application, golf_stat,
- [{description, "A golf stat analyzer"},
-  {vsn, "0.1.0"},
+ [{description, "golf_stat managed by Nova"},
+  {vsn, git},
   {registered, []},
+  {mod, { golf_stat_app, []}},
+  {included_applications, []},
   {applications,
-   [kernel,
+   [
+    kernel,
     stdlib,
-    cowboy
+    nova
    ]},
   {env,[]},
-  {mod, {gs_sup, []}},
   {modules, []},
-
+  {maintainers, []},
   {licenses, ["Apache 2.0"]},
   {links, []}
  ]}.

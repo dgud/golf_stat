@@ -17,7 +17,7 @@
          user_round_selection/1,
          user_diagram_data/2,
          user_stats_string/2,
-         new_user/1
+         new_user/2, is_user/2
         ]).
 
 -export([start_link/1]).
@@ -86,9 +86,13 @@ user_stats_string(_, _Selection) ->
 add_round(User, Round) ->
     gen_server:call(?SERVER, {add_round, to_user_atom(User), Round}).
 
--spec new_user(User :: userId()) -> ok | err().
-new_user(User) when is_binary(User) ->
-    gen_server:call(?SERVER, {new_user, to_user_atom(User)}).
+-spec new_user(User :: userId(), Pwd :: binary()) -> ok | err().
+new_user(User, Pwd) when is_binary(User), is_binary(Pwd) ->
+    gen_server:call(?SERVER, {new_user, to_user_atom(User), Pwd}).
+
+-spec is_user(User :: userId(), Pwd :: binary()) -> ok | err().
+is_user(User, Pwd) ->
+    gen_server:call(?SERVER, {is_user, to_user_atom(User), Pwd}).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -98,6 +102,7 @@ start_link(Args) ->
 init(#{dir := Dir} = _Args) ->
     process_flag(trap_exit, true),
     %% ?DBG("~p~n",[_Args]),
+    gs_auth:init(),
     Cs = gs_stats:read_courses(Dir),
     Files = filelib:wildcard(filename:join(Dir, "*_stat.json")),
     Load = fun(File, Acc) ->
@@ -204,18 +209,39 @@ handle_call({add_round, User, Round0}, _From, #state{users = Users, courses = Cs
             end
     end;
 
-handle_call({new_user, User}, _From, #state{dir = Dir, users = Users} = State) ->
+handle_call({new_user, User, Pwd}, _From, #state{dir = Dir, users = Users} = State) ->
     case maps:get(User, Users, undefined) of
         undefined ->
             File = filename:join(Dir, atom_to_list(User) ++ "_stat.json"),
             ok = gs_stats:save_player(File, []),
             UserData = #{
                          file   => File,
+                         pwd    => Pwd,
                          rounds => gs_stats:read_player(File)
                         },
             {reply, ok, State#state{users = Users#{User => UserData}}};
         _UserData ->
             Res = {error, <<"User already exists: ", (atom_to_binary(User))/binary >>},
+            {reply, Res, State}
+    end;
+
+handle_call({is_user, User, Pwd}, _From, #state{users = Users} = State) ->
+    case maps:get(User, Users, undefined) of
+        #{pwd := Pwd} ->
+            {reply, ok, State};
+        #{pwd := _Correct} ->
+            Res = {error, <<"Wrong password or user">>},
+            {reply, Res, State};
+        #{} ->
+            case gs_auth:make_passwd(<<"pwd">>) of
+                Pwd ->
+                    {reply, ok, State};
+                _ ->
+                    Res = {error, <<"Wrong password or user">>},
+                    {reply, Res, State}
+            end;
+        _UserData ->
+            Res = {error, <<"Wrong password or user">>},
             {reply, Res, State}
     end;
 
