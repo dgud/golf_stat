@@ -1,0 +1,107 @@
+<html>
+  <head>
+        <title>Add a new course:</title>
+  </head>
+  <body>
+    <p>
+      <form id = "courseinfo">
+        <p>
+          <label for="fname">Course name:</label><br>
+          <input type="text" id="course" name="course" value=""><br>
+        </p>
+        <p> Par 3 4 5 </p>
+      1: <input type="radio", id="01-3", name="1", value=3>
+      <input type="radio", id="01-4", name="1", value=4>
+      <input type="radio", id="01-5", name="1", value=5> <br>
+      2: <input type="radio", id="02-3", name="2", value=3>
+      <input type="radio", id="02-4", name="2", value=4>
+      <input type="radio", id="02-5", name="2", value=5> <br>
+      3: <input type="radio", id="03-3", name="3", value=3>
+      <input type="radio", id="03-4", name="3", value=4>
+      <input type="radio", id="03-5", name="3", value=5> <br>
+      4: <input type="radio", id="04-3", name="4", value=3>
+      <input type="radio", id="04-4", name="4", value=4>
+      <input type="radio", id="04-5", name="4", value=5> <br>
+      5: <input type="radio", id="05-3", name="5", value=3>
+      <input type="radio", id="05-4", name="5", value=4>
+      <input type="radio", id="05-5", name="5", value=5> <br>
+      6: <input type="radio", id="06-3", name="6", value=3>
+      <input type="radio", id="06-4", name="6", value=4>
+      <input type="radio", id="06-5", name="6", value=5> <br>
+      7: <input type="radio", id="07-3", name="7", value=3>
+      <input type="radio", id="07-4", name="7", value=4>
+      <input type="radio", id="07-5", name="7", value=5> <br>
+      8: <input type="radio", id="08-3", name="8", value=3>
+      <input type="radio", id="08-4", name="8", value=4>
+      <input type="radio", id="08-5", name="8", value=5> <br>
+      9: <input type="radio", id="09-3", name="9", value=3>
+      <input type="radio", id="09-4", name="9", value=4>
+      <input type="radio", id="09-5", name="9", value=5> <br> <br>
+
+      10: <input type="radio", id="10-3", name="10", value=3>
+      <input type="radio", id="10-4", name="10", value=4>
+      <input type="radio", id="10-5", name="10", value=5> <br>
+      11: <input type="radio", id="11-3", name="11", value=3>
+      <input type="radio", id="11-4", name="11", value=4>
+      <input type="radio", id="11-5", name="11", value=5> <br>
+      12: <input type="radio", id="12-3", name="12", value=3>
+      <input type="radio", id="12-4", name="12", value=4>
+      <input type="radio", id="12-5", name="12", value=5> <br>
+      13: <input type="radio", id="13-3", name="13", value=3>
+      <input type="radio", id="13-4", name="13", value=4>
+      <input type="radio", id="13-5", name="13", value=5> <br>
+      14: <input type="radio", id="14-3", name="14", value=3>
+      <input type="radio", id="14-4", name="14", value=4>
+      <input type="radio", id="14-5", name="14", value=5> <br>
+      15: <input type="radio", id="15-3", name="15", value=3>
+      <input type="radio", id="15-4", name="15", value=4>
+      <input type="radio", id="15-5", name="15", value=5> <br>
+      16: <input type="radio", id="16-3", name="16", value=3>
+      <input type="radio", id="16-4", name="16", value=4>
+      <input type="radio", id="16-5", name="16", value=5> <br>
+      17: <input type="radio", id="17-3", name="17", value=3>
+      <input type="radio", id="17-4", name="17", value=4>
+      <input type="radio", id="17-5", name="17", value=5> <br>
+      18: <input type="radio", id="18-3", name="18", value=3>
+      <input type="radio", id="18-4", name="18", value=4>
+      <input type="radio", id="18-5", name="18", value=5> <br>
+
+      <input type="reset" value="Reset">
+      <input type="button" value="Submit" onclick="sendForm()" >
+    </form>
+    </p>
+
+    <script>
+      async function sendData(jsonObject) {
+          try {
+              const response = await fetch("api/json/add_course" , {
+                  method: "POST",
+                  headers: {
+                      "Content-Type": "application/json"
+                  },
+                  body: JSON.stringify(jsonObject)
+              });
+              console.log(await response.json());
+          } catch (e) {
+              console.error(e);
+          }
+      }
+
+      function sendForm() {
+          var name = document.getElementById('course').value;
+          const arr = [];
+          var ele = document.getElementsByTagName('input');
+          for (i = 0; i < ele.length; i++) {
+              if (ele[i].type = "radio") {
+                  if (ele[i].checked)
+                      arr.push(Number(ele[i].value));
+              }
+          }
+          console.log(name);
+          console.log(arr);
+          var json = {name: name, pars: arr};
+          sendData(json)
+      }
+    </script>
+  </body>
+</html>

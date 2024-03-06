@@ -1,0 +1,18 @@
+<html>
+  <head>
+    <title>Server is running</title>
+  </head>
+  <body>
+    <link href='https://fonts.googleapis.com/css?family=Lato:300,400,700' rel='stylesheet' type='text/css'>
+
+    <p>  <a href='add_course'> Add a new course </a> </p>
+
+    <div id='title'>
+         <p>
+         {% for course in courses %}
+            <a href='course/{{ course.1 }}'> {{ course.2 }} </a> <br/>
+         {% endfor %}
+         </p>
+    </div>
+  </body>
+</html>

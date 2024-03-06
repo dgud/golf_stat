@@ -119,7 +119,7 @@ read_courses(Dir) ->
     end.
 
 save_courses(Courses, Dir) ->
-    Prefixed = [{Name,Course} ||  #{name:=Name} = Course <- Courses],
+    Prefixed = [{string:casefold(Name),Course} ||  #{name:=Name} = Course <- Courses],
     Sorted = [Course || {_, Course} <- lists:sort(Prefixed)],
     Encoded = jsone:encode(Sorted, [native_utf8, {space, 0}, {indent, 1}]),
     ok = file:write_file(filename:join(Dir,"courses.json"), Encoded),

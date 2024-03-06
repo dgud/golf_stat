@@ -3,6 +3,11 @@
 -export([
          index/1,
          login_view/1,
+         courses_view/1,
+         course_view/1,
+         add_course_view/1,
+
+         %% Json api
          get_courses/1,
          get_course/1,
          add_course/1,
@@ -17,14 +22,32 @@
 
 index(#{auth_data := #{auth := true, username := Username} = _Req}) ->
     %% ?DBG(" ~P~n",[_Req,20]),
-    {ok, [{message, <<"Hello  ", Username/binary>>}]};
+    {ok, [{message, <<"Hello  ", Username/binary>>},
+          {auth, true}
+         ]};
 index(_Req) ->
     %% ?DBG("~n~p~n",[_Req]),
-    {ok, [{message, "Please login!"}]}.
+    {ok, [{message, "Please login!"},
+          {auth, false}
+         ]}.
 
 login_view(_Req) ->
     %% ?DBG(" ~P~n",[_Req,20]),
     {ok, [], #{view => login}}.
+
+courses_view(_Req) -> %% #{auth_data := #{auth := true}}
+    Cs = gs_lib:enumerate(0, [unicode:characters_to_list(C) || C <- golf_stat:courses()]),
+    {ok, [{courses, Cs}], #{view => courses}}.
+
+course_view(#{bindings := #{<<"courseId">> := IdStr}}) ->
+    reply(golf_stat:course(to_integer(IdStr))).
+
+add_course_view(auth_data := #{auth := true}) ->
+    {ok,
+     [{hostpath, "http:/localhost:8080/api/json/add_course"}],
+     #{view => add_course}};
+add_course_view(_) ->
+    {status, 401}.
 
 
 %% Json stuff
@@ -33,19 +56,12 @@ get_courses(_Req) ->
     reply({ok, golf_stat:courses()}).
 
 get_course(#{bindings := #{<<"courseId">> := IdStr}}) ->
-    Id = case string:to_integer(IdStr) of
-             {Int, <<>>} -> Int;
-             _ -> try gs_lib:base64_decode(IdStr) of
-                      Course -> Course
-                  catch _:_ ->
-                          IdStr
-                  end
-         end,
+    Id = to_integer(IdStr),
     reply(golf_stat:course(Id)).
 
 add_course(#{json := Req}) ->
     reply(golf_stat:add_course(json_akeys(Req)));
-add_course(_) ->
+add_course(_Req) ->
     reply({error, <<"Invalid json">>}).
 
 get_user_selections(#{auth_data := #{username := User}}) ->
@@ -91,3 +107,12 @@ json_akeys(Val) ->
     Val.
 
 
+to_integer(IdStr) ->
+    case string:to_integer(IdStr) of
+        {Int, <<>>} -> Int;
+        _ -> try gs_lib:base64_decode(IdStr) of
+                 Course -> Course
+             catch _:_ ->
+                     IdStr
+             end
+    end.
