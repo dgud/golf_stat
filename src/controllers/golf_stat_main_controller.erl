@@ -7,6 +7,7 @@
          course_view/1,
          add_course_view/1,
          add_user_round_view/1,
+         user_stats_string_view/1,
 
          %% Json api
          get_courses/1,
@@ -55,6 +56,16 @@ add_user_round_view(#{auth_data := #{auth := true}}) ->
 add_user_round_view(_) ->
     {status, 401}.
 
+user_stats_string_view(#{auth_data := #{auth := true, username := User}}) ->
+    {ok, [Def|_] = Sels} = golf_stat:user_round_selection(User),
+    SelStrings = gs_lib:enumerate(0, [unicode:characters_to_list(C) || C <- Sels]),
+    {ok, String} = golf_stat:user_stats_string(User, Def),
+    {ok,
+     [{selections, SelStrings}, {default, unicode:characters_to_list(String)}],
+     #{view => view_string_stats}};
+user_stats_string_view(_) ->
+    {status, 401}.
+
 
 %% Json stuff
 
@@ -77,11 +88,24 @@ get_user_selections(_Req) ->
 
 get_stats_string(#{auth_data := #{username := User}, json := #{<<"selection">> := Sel}}) ->
     reply(golf_stat:user_stats_string(User, Sel));
+get_stats_string(#{auth_data := #{username := User}, bindings := #{<<"nr">> := SelNr}}) ->
+    {ok, Sels} = golf_stat:user_round_selection(User),
+    Sel = lists:nth(binary_to_integer(SelNr)+1, Sels),
+    reply(golf_stat:user_stats_string(User, Sel));
 get_stats_string(_) ->
     reply({error, <<"Invalid selection">>}).
 
 
 get_stats_diagram(#{auth_data := #{username := User}, json := #{<<"selection">> := Sel}}) ->
+    case golf_stat:user_diagram_data(User, Sel) of
+        {ok, {Labels, Stats}} ->
+            reply({ok, #{labels => Labels, diagrams => Stats}});
+        Error ->
+            reply(Error)
+    end;
+get_stats_diagram(#{auth_data := #{username := User}, bindings := #{<<"nr">> := SelNr}}) ->
+    {ok, Sels} = golf_stat:user_round_selection(User),
+    Sel = lists:nth(binary_to_integer(SelNr)+1, Sels),
     case golf_stat:user_diagram_data(User, Sel) of
         {ok, {Labels, Stats}} ->
             reply({ok, #{labels => Labels, diagrams => Stats}});

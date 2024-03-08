@@ -13,6 +13,7 @@ init() ->
 
 store_session(#{headers := Headers}, UserName) ->
     <<"session_id=", Session/binary>> = maps:get(<<"cookie">>, Headers, undefined),
+    ?DBG("Store: ~s id: ~s~n", [UserName, Session]),
     true = ets:insert(?STORE, {Session, UserName}).
 
 fetch_user(#{headers := Headers}) ->
@@ -43,6 +44,7 @@ login(#{params := Params} = Req) ->
     %% ?DBG(" ~P~n",[Params,20]),
     case Params of
         #{<<"username">> := Username, <<"password">> := Pwd} ->
+            ?DBG("Login: ~s pwd *******~n", [Username]),
             case golf_stat:is_user(Username, make_passwd(Pwd)) of
                 ok ->
                     store_session(Req, Username),
