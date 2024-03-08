@@ -1,0 +1,89 @@
+<html>
+  <head> <title>Statistics:</title> </head>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@kurkle/color.js"></script>
+  
+  <body>
+    <h2> Your statistics: </h2>
+
+    <p>
+      <form id="stat_selection">
+        <label for="stats"> Select statisics:</label>
+        <select id="stats" name="stats" onclick='fetch_stat()'>
+          {% for sel in selections %}
+          <option value={{ sel.1 }} > {{sel.2}} </option>
+          {% endfor %}
+        </select>
+      </form>
+    </p>
+
+    {% for id in ids %}
+    <h3 align="center"> {{ id.2 }} </h3>
+    <canvas align="center" id="{{ id.1 }}" style="width:100%;max-width:800px"></canvas>
+    {% endfor %}
+
+    <script>
+
+      fetch_stat();  // init
+      let charts = [];
+      let colors = ['rgb(240, 100, 100, 100)', 'rgb(0, 128, 0, 100)',     'rgb(25, 45, 170, 100)',
+                    'rgb(200, 130, 0, 100)',   'rgb(180, 180, 180, 100)', 'rgb(100, 240, 240, 100)',
+                    'rgb(240, 100, 240, 100)', 'rgb(160, 40, 40, 100)',   'rgb(100, 100, 240, 100)',
+                    'rgb(140, 140, 0, 100)',   'rgb(25, 200, 100, 100)',  'rgb(120, 25, 240, 100)',
+                    'rgb(255, 140, 163, 100)', 'rgb(25, 120, 120, 100)',  'rgb(120, 25, 120, 100)',
+                    'rgb(110, 90, 60, 100)'
+                   ];
+
+      function display_graphs(diagrams) {
+          for (chart of charts) {
+              chart.destroy();
+          }
+          charts = [];
+          i = 0;
+          for (diagram of diagrams) {
+              display_chart(diagram, colors[i]);
+              i++;
+          }
+      }
+
+      function display_chart(diagram, color) {
+          data = diagram.data;
+          data.borderColor = color;
+          data.backgroundColor = color;
+          chart = new Chart(document.getElementById(diagram.id),
+                            {
+                                type: 'bar',
+                                data: data
+                            }
+                           );
+      charts.push(chart);
+      }
+
+      function fetch_stat() {
+          var sel = document.getElementById('stats').value;
+          fetchData("api/json/user/stats_diagram/" + sel).then(
+              function(data) {
+                  display_graphs(data);
+              }
+          )
+      }
+
+      async function fetchData(url) {
+          try {
+              const response = await fetch(url);
+              if (response.ok) {
+                  const data = await response.json();
+                  console.log("Fetched data:", data);
+                  return data;
+              } else {
+                  const data = await response.json();
+                  console.log("Error description:", data);
+                  return data;
+              }
+          } catch (error) {
+              console.error("Fetch fail:", error);
+          }
+      }
+    </script>
+  </body>
+</html>

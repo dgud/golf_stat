@@ -39,10 +39,12 @@
        </span>
 
       {% if auth %}
-      <a href='add_round'> Add Round </a>
-      <a href='courses'> View Courses </a>
+      <a href='add_round'> Add Round </a> <br>
+      <a href='diagram_stats'> Diagram statistics </a> <br>
+      <a href='text_stats'> Text statistics </a> <br>
+      <a href='courses'> Courses </a> <br>
       {% else %}
-      <a href='login'> LOGIN </a>
+      <a href='login'> >LOGIN< </a>
       {% endif %}
     </div>
   </body>

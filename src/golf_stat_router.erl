@@ -12,8 +12,8 @@ routes(_Environment) ->
        prefix => "",
        security => false,
        routes =>
-           [{"/login", {golf_stat_main_controller, login_view}, #{methods => [get]}}
-            %% {"/login", {gs_auth, login}, #{methods => [post]}}
+           [{"/login", {golf_stat_main_controller, login_view}, #{methods => [get]}},
+            {"/assets/[...]", "assets"}
            ]
       },
 
@@ -27,6 +27,8 @@ routes(_Environment) ->
             {"/course/:courseId", {golf_stat_main_controller, course_view}, #{methods => [get]}},
             {"/add_course", {golf_stat_main_controller, add_course_view}, #{methods => [get]}},
             {"/add_round", {golf_stat_main_controller, add_user_round_view}, #{methods => [get]}},
+            {"/text_stats", {golf_stat_main_controller, user_stats_string_view}, #{methods => [get]}},
+            {"/diagram_stats", {golf_stat_main_controller, user_stats_diagram_view}, #{methods => [get]}},
             {"/assets/[...]", "assets"}
            ]
       },
@@ -43,7 +45,9 @@ routes(_Environment) ->
             {"/user/add_user",      {golf_stat_main_controller, add_user}, #{methods => [options, post]}},
             {"/user/selections",    {golf_stat_main_controller, get_user_selections}, #{methods => [options, get]}},
             {"/user/add_round",     {golf_stat_main_controller, add_user_round}, #{methods => [options, post]}},
-            {"/user/stats_string",  {golf_stat_main_controller, get_stats_string}, #{methods => [options, post]}},
-            {"/user/stats_diagram", {golf_stat_main_controller, get_stats_diagram}, #{methods => [options, post]}}
+            {"/user/stats_string",      {golf_stat_main_controller, get_stats_string}, #{methods => [options, post]}},
+            {"/user/stats_diagram",     {golf_stat_main_controller, get_stats_diagram}, #{methods => [options, post]}},
+            {"/user/stats_string/:nr",  {golf_stat_main_controller, get_stats_string}, #{methods => [options, get]}},
+            {"/user/stats_diagram/:nr", {golf_stat_main_controller, get_stats_diagram}, #{methods => [options, get]}}
            ]}
     ].

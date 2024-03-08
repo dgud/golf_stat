@@ -7,6 +7,8 @@
          course_view/1,
          add_course_view/1,
          add_user_round_view/1,
+         user_stats_string_view/1,
+         user_stats_diagram_view/1,
 
          %% Json api
          get_courses/1,
@@ -55,6 +57,26 @@ add_user_round_view(#{auth_data := #{auth := true}}) ->
 add_user_round_view(_) ->
     {status, 401}.
 
+user_stats_string_view(#{auth_data := #{auth := true, username := User}}) ->
+    {ok, [Def|_] = Sels} = golf_stat:user_round_selection(User),
+    SelStrings = gs_lib:enumerate(0, [unicode:characters_to_list(C) || C <- Sels]),
+    {ok, String} = golf_stat:user_stats_string(User, Def),
+    {ok,
+     [{selections, SelStrings}, {default, unicode:characters_to_list(String)}],
+     #{view => view_string_stats}};
+user_stats_string_view(_) ->
+    {status, 401}.
+
+user_stats_diagram_view(#{auth_data := #{auth := true, username := User}}) ->
+    {ok, [Def|_] = Sels} = golf_stat:user_round_selection(User),
+    SelStrings = gs_lib:enumerate(0, [unicode:characters_to_list(C) || C <- Sels]),
+    {ok, {_, Data}} = golf_stat:user_diagram_data(User, Def),
+    Ids = ["chart" ++ integer_to_list(No) || {No, _} <- gs_lib:enumerate(1, Data)],
+    Titels = ["Statistics", "Scores", "Long game", "Short game",
+              "Putting", "Number of putts", "Hole Stats"],
+    {ok, [{selections, SelStrings},  {ids, lists:zip(Ids, Titels)}],  #{view => view_diagram_stats}};
+user_stats_diagram_view(_) ->
+    {status, 401}.
 
 %% Json stuff
 
@@ -77,6 +99,10 @@ get_user_selections(_Req) ->
 
 get_stats_string(#{auth_data := #{username := User}, json := #{<<"selection">> := Sel}}) ->
     reply(golf_stat:user_stats_string(User, Sel));
+get_stats_string(#{auth_data := #{username := User}, bindings := #{<<"nr">> := SelNr}}) ->
+    {ok, Sels} = golf_stat:user_round_selection(User),
+    Sel = lists:nth(binary_to_integer(SelNr)+1, Sels),
+    reply(golf_stat:user_stats_string(User, Sel));
 get_stats_string(_) ->
     reply({error, <<"Invalid selection">>}).
 
@@ -85,6 +111,16 @@ get_stats_diagram(#{auth_data := #{username := User}, json := #{<<"selection">> 
     case golf_stat:user_diagram_data(User, Sel) of
         {ok, {Labels, Stats}} ->
             reply({ok, #{labels => Labels, diagrams => Stats}});
+        Error ->
+            reply(Error)
+    end;
+get_stats_diagram(#{auth_data := #{username := User}, bindings := #{<<"nr">> := SelNr}}) ->
+    {ok, Sels} = golf_stat:user_round_selection(User),
+    Sel = lists:nth(binary_to_integer(SelNr)+1, Sels),
+    case golf_stat:user_diagram_data(User, Sel) of
+        {ok, DiagramData} ->
+            DataSets = setup_diagrams(DiagramData),
+            reply({ok, DataSets});
         Error ->
             reply(Error)
     end;
@@ -112,7 +148,6 @@ json_akeys(Req) when is_list(Req) ->
 json_akeys(Val) ->
     Val.
 
-
 to_integer(IdStr) ->
     case string:to_integer(IdStr) of
         {Int, <<>>} -> Int;
@@ -122,3 +157,37 @@ to_integer(IdStr) ->
                      IdStr
              end
     end.
+
+%% charts needs data to be transposed into datasets
+setup_diagrams({DataSetLabels, DiagramData}) ->
+    setup_diagrams(DiagramData, 1, DataSetLabels, []).
+
+setup_diagrams([DD|DDs], Id, DataSetLabels, Acc) ->
+    DataSet = setup_dataset(DD, DataSetLabels),
+    %% ?DBG("~p~n",[DataSet]),
+    Diagram = #{id => <<"chart", (integer_to_binary(Id))/binary>>,
+                data => DataSet},
+    setup_diagrams(DDs, Id+1, DataSetLabels, [Diagram|Acc]);
+setup_diagrams([], _, _, Acc) ->
+    lists:reverse(Acc).
+
+setup_dataset(DD, DataSetLabels) ->
+    Labels = [Label || #{label := Label} <- DD],
+    DLists = [Data || #{data := Data} <- DD],
+    Transposed = transpose(DLists, []),
+    DS = lists:zipwith(fun dataset/2, DataSetLabels, Transposed, trim),
+    #{labels => Labels, datasets => DS}.
+
+dataset(Label, DataList) ->
+    #{label => Label,  data => DataList}.
+
+transpose([[]|_], Acc) ->
+    lists:reverse(Acc);
+transpose(DLists, Acc) ->
+    {Hs, Ts} = split_list(DLists, [], []),
+    transpose(Ts, [Hs|Acc]).
+
+split_list([[H|T]|Rest], Hs, Ts) ->
+    split_list(Rest, [H|Hs], [T|Ts]);
+split_list([], Hs, Ts) ->
+    {lists:reverse(Hs), lists:reverse(Ts)}.
