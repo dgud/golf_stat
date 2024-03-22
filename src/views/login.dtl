@@ -6,8 +6,34 @@
       <input type="text" id="username" name="username"><br>
       <label for="password">Password:</label>
       <input type="password" id="password" name="password"><br>
-      <input type="submit" value="submit">
+      <input type="button" value="submit" onclick="sendForm()">
     </form>
   </div>
+
+  <script>
+    async function sendData(jsonObject) {
+        try {
+            const response = await fetch("api/login" , {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify(jsonObject)
+            });
+            console.log(await response.json());
+            window.location.href="/"
+        } catch (e) {
+            console.error(e);
+            alert("Invalid credentials, Please try again");
+        }
+    }
+
+    function sendForm() {
+        var name = document.getElementById('username').value;
+        var pwd  = document.getElementById('password').value;
+        var json = {username: name, password: pwd};
+        sendData(json)
+    }
+  </script>
 </body>
 </html>

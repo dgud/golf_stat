@@ -10,6 +10,8 @@
          user_stats_string_view/1,
          user_stats_diagram_view/1,
 
+         login/1,
+
          %% Json api
          get_courses/1,
          get_course/1,
@@ -29,14 +31,15 @@ index(#{auth_data := #{auth := true, username := Username} = _Req}) ->
           {auth, true}
          ]};
 index(_Req) ->
-    %% ?DBG("~n~p~n",[_Req]),
     {ok, [{message, "Please login!"},
           {auth, false}
          ]}.
 
 login_view(_Req) ->
-    %% ?DBG(" ~P~n",[_Req,20]),
     {ok, [], #{view => login}}.
+
+login(Req) ->
+    reply(gs_auth:login(Req)).
 
 courses_view(#{auth_data := #{auth := true}}) ->
     Cs = gs_lib:enumerate(0, [unicode:characters_to_list(C) || C <- golf_stat:courses()]),

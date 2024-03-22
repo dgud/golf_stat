@@ -11,18 +11,20 @@ routes(_Environment) ->
      #{
        prefix => "",
        security => false,
+       plugins => [{pre_request, nova_request_plugin, #{decode_json_body => true}}],
        routes =>
-           [{"/login", {golf_stat_main_controller, login_view}, #{methods => [get]}},
+           [
+            {"/login", {golf_stat_main_controller, login_view}, #{methods => [get]}},
+            {"/api/login", {golf_stat_main_controller, login}, #{methods => [options, post]}},
             {"/assets/[...]", "assets"}
            ]
       },
 
      #{prefix => "",
-       security => {gs_auth, login},
+       security => {gs_auth, check_login},
        routes =>
            [
             {"/", {golf_stat_main_controller, index}, #{methods => [get]}},
-            {"/", {golf_stat_main_controller, index}, #{methods => [post]}},
             {"/courses", {golf_stat_main_controller, courses_view}, #{methods => [get]}},
             {"/course/:courseId", {golf_stat_main_controller, course_view}, #{methods => [get]}},
             {"/add_course", {golf_stat_main_controller, add_course_view}, #{methods => [get]}},
@@ -34,9 +36,7 @@ routes(_Environment) ->
       },
      #{prefix => "/api/json",
        security => {gs_auth, verify_login},
-       plugins => [
-                   {pre_request, nova_request_plugin, #{decode_json_body => true}}
-                  ],
+       plugins => [{pre_request, nova_request_plugin, #{decode_json_body => true}}],
        routes =>
            [
             {"/courses",            {golf_stat_main_controller, get_courses}, #{methods => [options, get]}},
